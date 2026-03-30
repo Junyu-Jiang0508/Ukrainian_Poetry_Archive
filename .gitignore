@@ -1,0 +1,13 @@
+# secrets
+.env
+.env.local
+annotation_app_cloud/.streamlit/secrets.toml
+
+# large / generated
+data/
+outputs/
+
+# Python
+__pycache__/
+*.pyc
+venv/
