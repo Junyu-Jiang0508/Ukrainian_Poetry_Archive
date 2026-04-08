@@ -1,0 +1,56 @@
+**Project Title:** The Grammar of Belonging: Computational Analysis of Pronominal Deixis in Wartime Ukrainian Poetry (2014–2025)
+
+**Student:** Junyu Jiang
+**Capstone Host/Advisor:** Professor Amelia Glaser
+**Project:** Contemporary Ukrainian Poetry Archive
+
+### 1. Introduction and Background
+Since 2014, and accelerating after the full-scale invasion of 2022, Ukrainian poetry has moved beyond mere aesthetics to become a vital form of dialogue essential for rebuilding social cohesion amid the trauma of war. As Amelia Glaser states in her introduction to the Contemporary Ukrainian Poetry Archive, these poems act not just as individual expressions but as a conversational poetics through which poets affirm mutual existence and define community boundaries in response to extreme violence.
+
+However, analyzing this subtle process of identity shaping within the framework of computational social science presents significant challenges. Early computational efforts often depended on commercial Large Language Models to detect broad style shifts. Yet, recent research shows that when dealing with texts rich in ideological content, LLMs are highly vulnerable to pre-existing biases and party cues, leading to drifting labels and reduced interpretability. Additionally, for languages like Ukrainian with less training data, black-box models often fail to capture the detailed formal qualities of poetry and cannot meet strict archival standards for auditability and ethics.
+
+Therefore, this project shifts away from an amorphous style detection approach to a more theory-based and interpretable method: the analysis of Pronominal Strategies. Linguistic research highlights that pronouns are not just grammatical placeholders but political tools for constructing social realities and defining group boundaries. In conflict settings, pronominal usage directly maps onto what Brubaker describes as the process of group-making, where nation and ethnicity are not fixed but are continuously created through ongoing categorization practices.
+
+This project uses the Contemporary Ukrainian Poetry Archive as its main corpus. Incorporating Benkler’s theory of the networked public sphere, We examine how these poetic texts circulate primarily within digital networks. By tracking changes in pronominal references from 2014 to 2025, we aim to uncover how Ukrainian identity is renegotiated and shaped through the tension between Self and Other. 
+
+### 2. Research Questions and Hypotheses
+This project moves beyond summary statistics to address specific hypotheses regarding the evolution of poetic agency:
+
+* RQ1: How has the referential scope of the first-person plural pronoun We (Ми) structurally changed in wartime poetry from 2014 to 2025?
+
+Drawing on Brubaker’s theory that nationhood is a classification practice based on binary opposition, we examine whether We has contracted from an Inclusive We to a Collective/Defensive We defined primarily in opposition to an enemy. Concurrently, incorporating Kulyk’s research on Ukrainian identity discourse, we analyze how this construction of "We" navigates internal linguistic and ethnic differences.
+
+* RQ2: What function does the second-person pronoun You (Ти/Ви) serve within the apostrophic structures of poetry? Can we distinguish in semantic space between a Conversational You directed at intimate objects (e.g., family on the front lines, compatriots) and an Adver
+
+Glaser posits that Ukrainian poetry is inherently "conversational," a call issued by the poet to a specific addressee. Furthermore, Aboh’s study on pronominal strategies in political poetry suggests that the second person is often a key indicator for demarcating social distance. We will quantify the separation of these two types of "You" in terms of emotional valence and semantic neighborhoods.
+
+* RQ3: How does pronominal usage covary with specific conceptual entities (e.g., Land/Zemlya, Home/Dim, Mother/Maty)? Across different phases of the war, are these core images increasingly anchored by possessive pronouns?
+
+### 4. Methods
+
+The methodological approach prioritizes interpretability over complexity, combining rule-based heuristics with open, transparent machine learning models. To accurately capture pronominal usage, the analysis operates at two distinct levels of granularity: grammatical detection occurs at the sentence level, while statistical regression is performed at the poem level.
+
+A. Preprocessing and Form Preservation
+
+Unlike standard NLP pipelines that flatten text, our pipeline preserves lineation and stanza breaks as analytic units. We utilize "public-only" discovery tools that handle URL canonicalization and fuzzy matching to deduplicate reposts, ensuring a clean corpus for analysis.
+
+B. Micro-Level Detection: Sentence as Unit of Analysis
+We hope to employ GPT4o with few-shot samples to identify case, number, and person. The fundamental unit of detection is the sentence or clause. This granularity is essential for resolving immediate syntactic dependencies:
+* Rule-Based Heuristics: Tailored specifically for poetic discourse to handle pro-drop (omitted subjects) and apostrophe (direct address) based on immediate sentence context.
+* Windowed Co-occurrence: Calculating associations between pronouns and nouns within specific line/stanza windows to resolve local referents.
+
+C. Macro-Level Aggregation: Poem as Unit of Regression
+While detection occurs at the sentence level, the unit of regression for statistical modeling is the entire poem. We aggregate micro-level features to identify the dominant pronominal orientation of a text. I intend to calculate the relative frequency and semantic weight of pronoun classes per poem.
+* Regression Modeling: These poem-level dominance scores serve as dependent variables in regression models, tested against independent variables such as publication year, author location, and thematic category.
+
+D. Analysis Across Thematic and Authorial Contexts
+To observe how pronominal functions vary across different scopes, we conduct analysis at three specific levels:
+1.  Intra-Thematic Variation: We isolate specific themes to observe how pronoun usage shifts within a single topic over time.
+2.  Author-Level Trajectories: We track individual authors longitudinally to observe personal stylistic shifts in deixis, correlating these changes with biographical metadata.
+3.  Single-Poem Case Studies: We select representative individual poems as qualitative exemplars. These serve to ground the quantitative findings, illustrating how the shift in a "dominant pronoun" manifests within the specific narrative arc of a single work.
+
+E. Semantic Change Analysis
+To quantify the shifting meaning of pronouns over time:
+* Time-Sliced Embeddings.
+* Vector Alignment: We align these temporal slices using Orthogonal Procrustes analysis to map the semantic space of 2014 onto 2025.
+* Neighborhood Analysis: We measure the cosine distance and rank changes of pronouns relative to key thematic concepts to visualize the hardening or softening of identity boundaries.

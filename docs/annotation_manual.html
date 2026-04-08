@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Annotation_Manual</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a
+href="#annotation-manual-advanced-pronoun-referents-inclusivity-and-polyphony"
+id="toc-annotation-manual-advanced-pronoun-referents-inclusivity-and-polyphony">Annotation
+Manual (Advanced): Pronoun Referents, Inclusivity, and Polyphony</a>
+<ul>
+<li><a href="#general-principles" id="toc-general-principles">0. General
+principles</a>
+<ul>
+<li><a href="#core-annotation-columns"
+id="toc-core-annotation-columns">0.1 Core annotation columns</a></li>
+</ul></li>
+<li><a href="#token-selection" id="toc-token-selection">1. Token
+selection</a></li>
+<li><a href="#annotating-referent_category"
+id="toc-annotating-referent_category">2. Annotating
+<code>referent_category</code></a>
+<ul>
+<li><a href="#definition" id="toc-definition">2.1 Definition</a></li>
+<li><a href="#enhanced-label-set-with-temporal-sensitivity"
+id="toc-enhanced-label-set-with-temporal-sensitivity">2.2 Enhanced label
+set with temporal sensitivity</a></li>
+<li><a href="#decision-procedure-with-algorithmic-logic"
+id="toc-decision-procedure-with-algorithmic-logic">2.3 Decision
+procedure with algorithmic logic</a></li>
+<li><a href="#boundary-case-protocols"
+id="toc-boundary-case-protocols">2.4 Boundary case protocols</a></li>
+<li><a href="#category-definitions-lexical-cues"
+id="toc-category-definitions-lexical-cues">2.5 Category definitions
+&amp; lexical cues</a></li>
+</ul></li>
+<li><a href="#annotating-we_inclusivity-only-for-1pl-ми"
+id="toc-annotating-we_inclusivity-only-for-1pl-ми">3. Annotating
+<code>we_inclusivity</code> (only for 1pl “ми”)</a>
+<ul>
+<li><a href="#enhanced-inclusivity-scale"
+id="toc-enhanced-inclusivity-scale">3.1 Enhanced inclusivity
+scale</a></li>
+<li><a href="#standard-3-level-scale-for-basic-annotation"
+id="toc-standard-3-level-scale-for-basic-annotation">3.2 Standard
+3-level scale (for basic annotation)</a></li>
+<li><a href="#decision-procedure" id="toc-decision-procedure">3.3
+Decision procedure</a></li>
+</ul></li>
+<li><a href="#enhanced-linguistic-features"
+id="toc-enhanced-linguistic-features">4. Enhanced linguistic
+features</a>
+<ul>
+<li><a href="#syntactic-position" id="toc-syntactic-position">4.1
+Syntactic position</a></li>
+<li><a href="#semantic-role" id="toc-semantic-role">4.2 Semantic
+role</a></li>
+<li><a href="#discourse-function" id="toc-discourse-function">4.3
+Discourse function</a></li>
+</ul></li>
+<li><a href="#annotating-poem-level-polyphony_type"
+id="toc-annotating-poem-level-polyphony_type">5. Annotating poem-level
+<code>polyphony_type</code></a>
+<ul>
+<li><a href="#definitions" id="toc-definitions">5.1 Definitions</a></li>
+<li><a href="#decision-procedure-1" id="toc-decision-procedure-1">5.2
+Decision procedure</a></li>
+</ul></li>
+<li><a href="#appendix-quick-reference"
+id="toc-appendix-quick-reference">Appendix: Quick reference</a>
+<ul>
+<li><a href="#a.1-referent-categories-9-core"
+id="toc-a.1-referent-categories-9-core">A.1 Referent categories (9
+core)</a></li>
+<li><a href="#a.2-inclusivity-scale-3-level"
+id="toc-a.2-inclusivity-scale-3-level">A.2 Inclusivity scale
+(3-level)</a></li>
+<li><a href="#a.3-polyphony-types-3" id="toc-a.3-polyphony-types-3">A.3
+Polyphony types (3)</a></li>
+</ul></li>
+</ul></li>
+</ul>
+</nav>
+<h1
+id="annotation-manual-advanced-pronoun-referents-inclusivity-and-polyphony">Annotation
+Manual (Advanced): Pronoun Referents, Inclusivity, and Polyphony</h1>
+<hr />
+<h2 id="general-principles">0. General principles</h2>
+<ul>
+<li><p><strong>Language</strong>: <strong>only Ukrainian
+poems</strong>.</p></li>
+<li><p><strong>Unit</strong>:</p>
+<ul>
+<li>Token-level tasks: each row = one <strong>pronoun
+token</strong>.</li>
+<li>Poem-level task: each poem ID = one <strong>document</strong>.</li>
+</ul></li>
+<li><p><strong>Context to read</strong>:</p>
+<ul>
+<li>Start from the <code>context</code> field (usually the line or
+sentence around the pronoun).</li>
+<li>If unclear, open the full poem (<code>text</code>) for additional
+context.</li>
+</ul></li>
+<li><p><strong>Golden rule</strong>:</p>
+<ul>
+<li>When in doubt, <strong>use “UNCERTAIN/AMBIGUOUS” rather than
+guessing</strong>.</li>
+</ul></li>
+</ul>
+<h3 id="core-annotation-columns">0.1 Core annotation columns</h3>
+<p><strong>Token-level (pronoun table)</strong>:</p>
+<ul>
+<li><code>referent_category</code> – main referent (see Section 2)</li>
+<li><code>referent_confidence</code> – confidence level (1–3)</li>
+<li><code>we_inclusivity</code> – inclusivity type (only for 1pl
+“ми”)</li>
+<li><code>we_incl_confidence</code> – confidence level (1–3)</li>
+<li><code>token_notes</code> – free text notes</li>
+<li><code>syntactic_position</code> – grammatical position</li>
+<li><code>semantic_role</code> – semantic role</li>
+<li><code>discourse_function</code> – discourse function</li>
+<li><code>context_window</code> – standardized context</li>
+<li><code>annotation_difficulty</code> – task difficulty rating</li>
+<li><code>polyphony_type</code> – voice structure</li>
+<li><code>polyphony_notes</code> – free text notes</li>
+</ul>
+<hr />
+<h2 id="token-selection">1. Token selection</h2>
+<ol type="1">
+<li><strong>Stratified sampling strategy</strong>:
+<ul>
+<li>Sample 400–600 tokens across time periods (2014–2021 vs
+2022–2025)</li>
+<li>Balance representation across themes</li>
+<li>Include edge cases and typical examples</li>
+</ul></li>
+</ol>
+<hr />
+<h2 id="annotating-referent_category">2. Annotating
+<code>referent_category</code></h2>
+<h3 id="definition">2.1 Definition</h3>
+<blockquote>
+<p><strong>Referent category</strong> = the <strong>main collective or
+person</strong> that the pronoun refers to in this context.</p>
+</blockquote>
+<h3 id="enhanced-label-set-with-temporal-sensitivity">2.2 Enhanced label
+set with temporal sensitivity</h3>
+<p>Based on Kulyk (2024) on identity shifts between 2014 and 2022:</p>
+<h4 id="core-categories"><strong>Core categories</strong>:</h4>
+<ol type="1">
+<li><code>SELF</code> – individual poet/self</li>
+<li><code>INTIMATE</code> – family, close friends, intimate circle</li>
+<li><code>LOCAL</code> – local community (city, region, battalion,
+unit)</li>
+<li><code>NATION</code> – Ukrainian national collective</li>
+<li><code>STATE</code> – state institutions</li>
+<li><code>ENEMY</code> – Russia, occupiers, collaborators</li>
+<li><code>SUPRANATIONAL</code> – Europe, West, humanity</li>
+<li><code>OTHER</code> – other identifiable groups</li>
+<li><code>UNCERTAIN</code> – unresolvable ambiguity</li>
+</ol>
+<p><strong>NATION subtypes</strong>: * <code>NATION_PRE2022</code> –
+defensive nationalism (2014–2021) * <code>NATION_POST2022</code> –
+mobilized nationalism (2022+)</p>
+<p><strong>ENEMY subtypes</strong>: * <code>ENEMY_IMPLICIT</code> –
+euphemistic references (“вони”, “ті, хто прийшов”) *
+<code>ENEMY_EXPLICIT</code> – direct naming (“росіяни”, “окупанти”,
+“орки”)</p>
+<hr />
+<h3 id="decision-procedure-with-algorithmic-logic">2.3 Decision
+procedure with algorithmic logic</h3>
+<pre><code>STEP 1: Check explicit markers
+  ├─ Has explicit national markers? (&quot;українці&quot;, &quot;народ&quot;, &quot;нація&quot;) → NATION
+  └─ No → Go to Step 2
+
+STEP 2: Check spatial markers
+  ├─ Has local spatial markers? (city names, &quot;тут&quot;, &quot;в нашому місті&quot;) → LOCAL
+  └─ No → Go to Step 3
+
+STEP 3: Check kinship terms
+  ├─ Has kinship/family terms? (&quot;мама&quot;, &quot;діти&quot;, &quot;родина&quot;) → INTIMATE
+  └─ No → Go to Step 4
+
+STEP 4: Check military context
+  ├─ Unit-level? (&quot;наша рота&quot;, &quot;взвод&quot;) → LOCAL
+  ├─ National army? (&quot;наші захисники&quot;, &quot;українська армія&quot;) → NATION
+  └─ No clear military context → Go to Step 5
+
+STEP 5: Check enemy markers
+  ├─ Has enemy markers? (&quot;окупанти&quot;, &quot;вони прийшли/бомблять&quot;) → ENEMY
+  └─ No → Go to Step 6
+
+STEP 6: Assess context breadth
+  ├─ Poem theme: individual/personal → Consider SELF or INTIMATE
+  ├─ Poem theme: community/city → Consider LOCAL
+  ├─ Poem theme: national struggle → Consider NATION
+  ├─ Poem theme: global/universal → Consider SUPRANATIONAL
+  └─ Cannot determine → UNCERTAIN</code></pre>
+<hr />
+<h3 id="boundary-case-protocols">2.4 Boundary case protocols</h3>
+<p><strong>Boundary Case 1: LOCAL vs NATION</strong></p>
+<ul>
+<li><strong>Rule</strong>: If specific place name + national framing
+(“ми всі українці”) → <code>NATION</code> (national frame
+prioritized)</li>
+<li><strong>Rule</strong>: If only “наше місто” + no national markers →
+<code>LOCAL</code></li>
+</ul>
+<p><strong>Example</strong>: * “Ми, кияни, захищаємо Україну” →
+<code>NATION</code> (national struggle frame) * “Ми, кияни, відбудовуємо
+наше метро” → <code>LOCAL</code> (city-specific focus)</p>
+<p><strong>Boundary Case 2: INTIMATE vs NATION</strong></p>
+<ul>
+<li><strong>Rule</strong>: “наші діти” depends on overall poem theme:
+<ul>
+<li>Personal narrative about speaker’s children →
+<code>INTIMATE</code></li>
+<li>Collective future (“діти України”, “next generation”) →
+<code>NATION</code></li>
+</ul></li>
+</ul>
+<p><strong>Example</strong>: * “Ми з дітьми ховалися в метро” (personal
+experience) → <code>INTIMATE</code> * “Наші діти побачать вільну
+Україну” (generational narrative) → <code>NATION</code></p>
+<p><strong>Boundary Case 3: INCLUSIVE vs AMBIGUOUS (for
+we_inclusivity)</strong></p>
+<ul>
+<li><strong>Default rule</strong>: No explicit second-person markers →
+<code>AMBIGUOUS</code></li>
+<li><strong>Exception</strong>: Imperative structures (“Давайте!”,
+“Згадаймо!”, “Разом ми…”) → <code>INCLUSIVE</code></li>
+</ul>
+<hr />
+<h3 id="category-definitions-lexical-cues">2.5 Category definitions
+&amp; lexical cues</h3>
+<h4 id="self">2.5.1 SELF</h4>
+<p><strong>Definition</strong>: the pronoun refers to <strong>the poet
+as an individual person</strong>.</p>
+<p><strong>Cues</strong>: * Personal experiences, feelings, memories
+(“моє дитинство”, “моє тіло”, “мій страх”) * “ми” used as
+modest/editorial “I” in highly self-centered poem * Focus on individual
+consciousness, not collective —</p>
+<h4 id="intimate">2.5.2 INTIMATE</h4>
+<p><strong>Definition</strong>: <strong>family or very close
+circle</strong> (partner, children, parents, close friends).</p>
+<p><strong>Lexical cues</strong>: * Kinship terms: “мама, батько, діти,
+коханий/кохана, сестра, брат” * Phrases: “ми з тобою”, “ми з дітьми”,
+“ми з мамою”</p>
+<p><strong>Examples</strong>: * “Ми з тобою пережили цю ніч” →
+<code>INTIMATE</code> * “Ми, наші діти і батьки, всі чекаємо на мир” →
+<code>INTIMATE</code></p>
+<hr />
+<h4 id="local">2.5.3 LOCAL</h4>
+<p><strong>Definition</strong>: <strong>local community or
+unit</strong>, not whole nation.</p>
+<p><strong>Types</strong>: * Geographic: city/town/village (“кияни”,
+“львів’яни”, “мешканці двору”) * Military: battalion/unit (“наша рота”,
+“наш батальйон”) * Refugee community in specific place</p>
+<p><strong>Cues</strong>: * Place names: “у Харкові”, “у Бучі”, “у
+Маріуполі” + “ми” * Unit language: “наш взвод”, “наші хлопці з третьої
+роти”</p>
+<p><strong>Rule</strong>: When LOCAL represents “this city as part of
+Ukraine”, still code <code>LOCAL</code> (more specific than NATION).</p>
+<hr />
+<h4 id="nation">2.5.4 NATION</h4>
+<p><strong>Definition</strong>: <strong>Ukrainians as national
+collective</strong> or Ukraine as a people (not institution).</p>
+<p><strong>Lexical cues</strong>: * National markers: “українці”,
+“народ”, “наш народ”, “наші воїни”, “ми – українці”, “ми – нація” *
+Theme: national solidarity across regions, war as national struggle</p>
+<p><strong>Examples</strong>: * “Ми вистоїмо, бо ми українці” →
+<code>NATION</code> * “Ми переможемо, наша земля не скориться” (implicit
+but clear) → <code>NATION</code></p>
+<p><strong>Temporal variation</strong> (optional annotation): *
+Pre-2022: often defensive, reactive (“ми захищаємося”) * Post-2022: more
+mobilized, active (“ми переможемо”, “ми непереможні”)</p>
+<hr />
+<h4 id="state">2.5.5 STATE</h4>
+<p><strong>Definition</strong>: <strong>state institutions and formal
+authorities</strong> (government, president, parliament).</p>
+<p><strong>Cues</strong>: * Institution terms: “уряд”, “президент”,
+“влада”, “держава”, “міністерство”, “Верховна Рада” * Critiques of
+“they” as “those in power”</p>
+<p><strong>Examples</strong>: * “Ми ухвалили такий закон” (parliament
+context) → <code>STATE</code> * “Вони знову нічого не зробили у Києві”
+(if refers to authorities) → <code>STATE</code></p>
+<hr />
+<h4 id="enemy">2.5.6 ENEMY</h4>
+<p><strong>Definition</strong>: <strong>Russia, Russian army, occupiers,
+collaborators</strong>.</p>
+<p><strong>Lexical cues</strong>: * Explicit: “росіяни”, “окупанти”,
+“орки”, “москалі”, “рашисти” * Implicit: “вони” with strongly negative
+verbs in war context (“бомблять”, “вбивають”, “прийшли з півночі”)</p>
+<p><strong>Intensity subtypes</strong> (optional): *
+<code>ENEMY_IMPLICIT</code>: “вони прийшли”, “ті, хто це зробив” *
+<code>ENEMY_EXPLICIT</code>: “орки спалили наш дім”, “російські
+окупанти”</p>
+<p><strong>Examples</strong>: * “Вони прийшли вночі, вони спалили наш
+дім” → <code>ENEMY</code> (or <code>ENEMY_EXPLICIT</code>) * “Ми женемо
+їх від нашої землі” (“їх” = Russians) → <code>ENEMY</code></p>
+<hr />
+<h4 id="supranational">2.5.7 SUPRANATIONAL</h4>
+<p><strong>Definition</strong>:
+<strong>humanity/world/Europe/West</strong>, beyond Ukrainian national
+frame.</p>
+<p><strong>Cues</strong>: * Global terms: “Європа”, “світ”, “людство”,
+“люди”, “ми всі на цій планеті” * Themes: global solidarity, universal
+suffering, humanity</p>
+<p><strong>Examples</strong>: * “Ми всі відповідальні за цю землю”
+(global environmental message) → <code>SUPRANATIONAL</code> * “Ми,
+європейці, не можемо мовчати” (European collective) →
+<code>SUPRANATIONAL</code></p>
+<p><strong>Disambiguation</strong>: * If poem is about “Ukraine as
+European” but focuses on Ukraine → <code>NATION</code> * If really about
+“all Europeans/humanity” → <code>SUPRANATIONAL</code></p>
+<hr />
+<h4 id="other">2.5.8 OTHER</h4>
+<p><strong>Definition</strong>: <strong>clearly identifiable group not
+covered above</strong>.</p>
+<p><strong>Examples</strong>: * “We poets”, “we artists”, “we women”
+(when not tied to national/local identity) * Generic social categories
+(“діти війни”, “біженці” as abstract category)</p>
+<hr />
+<h4 id="uncertain">2.5.9 UNCERTAIN</h4>
+<p>Use <code>UNCERTAIN</code> when: * Cannot decide even after reading
+full poem * Two+ categories equally strong, none dominates * Poem
+deliberately plays on ambiguity</p>
+<p><strong>Action</strong>: Add brief explanation in
+<code>token_notes</code> (e.g., “could be NATION or SUPRANATIONAL;
+author keeps this open”)</p>
+<hr />
+<h2 id="annotating-we_inclusivity-only-for-1pl-ми">3. Annotating
+<code>we_inclusivity</code> (only for 1pl “ми”)</h2>
+<h3 id="enhanced-inclusivity-scale">3.1 Enhanced inclusivity scale</h3>
+<p>Based on Santulli (2020) on grammatical metaphor, use <strong>5-level
+scale</strong> for nuanced analysis:</p>
+<ol type="1">
+<li><code>SPEAKER_EXCLUSIVE</code> – speaker only (editorial/modest
+we)</li>
+<li><code>SELECTIVE_EXCLUSIVE</code> – specific in-group excluding
+addressee (e.g., soldiers to civilians)</li>
+<li><code>AMBIVALENT</code> – strategically ambiguous</li>
+<li><code>SELECTIVE_INCLUSIVE</code> – conditional inclusion (e.g.,
+“supporters of Ukraine”)</li>
+<li><code>UNIVERSAL_INCLUSIVE</code> – unconditional inclusion of all
+humanity</li>
+</ol>
+<h3 id="standard-3-level-scale-for-basic-annotation">3.2 Standard
+3-level scale (for basic annotation)</h3>
+<p>For <strong>first round of annotation</strong>, use simplified
+scale:</p>
+<ol type="1">
+<li><code>INCLUSIVE</code> – speaker + addressee (+ possibly
+others)</li>
+<li><code>EXCLUSIVE</code> – speaker + some others, <strong>not</strong>
+addressee</li>
+<li><code>AMBIGUOUS</code> – cannot be resolved / intentionally
+open</li>
+</ol>
+<blockquote>
+<p><strong>Note</strong>: Use 5-level scale only when analyzing
+political rhetoric or strategic communication. Default to 3-level for
+poetry annotation.</p>
+</blockquote>
+<hr />
+<h3 id="decision-procedure">3.3 Decision procedure</h3>
+<p>When annotating 1pl “ми”:</p>
+<ol type="1">
+<li><p><strong>Identify addressee</strong> in poem:</p>
+<ul>
+<li>Is there “ти/ви” in second person?</li>
+<li>Are there vocatives (“друзі”, “брати і сестри”)?</li>
+<li>Is it public proclamation to “everyone”?</li>
+</ul></li>
+<li><p><strong>Ask</strong>: “Is this ‘we’ supposed to include that
+addressee?”</p></li>
+<li><p><strong>Apply rules</strong>:</p></li>
+</ol>
+<h4 id="inclusive">INCLUSIVE</h4>
+<p>Code when: poem addresses audience and <strong>invites them into
+“we”</strong>.</p>
+<p><strong>Patterns</strong>: * “Друзі, ми маємо триматися разом”
+(includes “друзі”) → <code>INCLUSIVE</code> * “Ми всі маємо пам’ятати
+про Бучу” → <code>INCLUSIVE</code></p>
+<p><strong>Cues</strong>: * “ми всі”, “разом з вами”, “давайте ми” *
+Calls to action where reader is part of “we”</p>
+<h4 id="exclusive">EXCLUSIVE</h4>
+<p>Code when: “ми” refers to <strong>subgroup</strong> that addressee is
+<strong>not</strong> part of.</p>
+<p><strong>Patterns</strong>: * “Ми стоїмо на фронті, а ви спіть
+спокійно” (soldiers vs civilians) → <code>EXCLUSIVE</code> * “Ми, поети,
+бачимо це інакше, ніж ви критики” → <code>EXCLUSIVE</code></p>
+<p><strong>Cues</strong>: * Contrastive structure: “ми …, а ви …” *
+Spatial split: “ми тут, а ви там”</p>
+<hr />
+<h2 id="enhanced-linguistic-features">4. Enhanced linguistic
+features</h2>
+<h3 id="syntactic-position">4.1 Syntactic position</h3>
+<p><strong>Definition</strong>: Grammatical position of pronoun in
+sentence.</p>
+<p><strong>Labels</strong>: * <code>SUBJECT</code> – main clause subject
+(“Ми переможемо”) * <code>OBJECT</code> – direct/indirect object (“Вони
+бачать нас”) * <code>POSSESSIVE</code> – possessive modifier (“наша
+земля”) * <code>PREPOSITIONAL</code> – in prepositional phrase (“про
+нас”, “з нами”)</p>
+<p><strong>Purpose</strong>: Syntactic position correlates with
+discourse prominence and referent type.</p>
+<hr />
+<h3 id="semantic-role">4.2 Semantic role</h3>
+<p><strong>Definition</strong>: Semantic role in event structure.</p>
+<p><strong>Labels</strong>: * <code>AGENT</code> – performer of action
+(“Ми будуємо”) * <code>PATIENT</code> – undergoer of action (“Нас
+бомблять”) * <code>EXPERIENCER</code> – psychological state (“Ми
+відчуваємо”) * <code>BENEFICIARY</code> – recipient (“Ми отримали
+допомогу”)</p>
+<p><strong>Purpose</strong>: Semantic roles reveal agency patterns in
+war discourse.</p>
+<hr />
+<h3 id="discourse-function">4.3 Discourse function</h3>
+<p><strong>Definition</strong>: Function in discourse organization.</p>
+<p><strong>Labels</strong>: * <code>TOPIC_CONTINUATION</code> –
+maintains current topic * <code>TOPIC_SHIFT</code> – introduces new
+topic * <code>CONTRASTIVE</code> – marks contrast (“А ми…”) *
+<code>EMPHATIC</code> – marks emphasis (“Саме ми”)</p>
+<p><strong>Purpose</strong>: Discourse functions show information
+structure and rhetorical strategies.</p>
+<hr />
+<h2 id="annotating-poem-level-polyphony_type">5. Annotating poem-level
+<code>polyphony_type</code></h2>
+<p>For each poem (unique <code>ID</code>), assign <strong>one</strong>
+label:</p>
+<ol type="1">
+<li><code>MONOLOGIC</code> – single stable voice</li>
+<li><code>MEDIATED_POLYPHONY</code> – central narrator
+collecting/quoting other voices</li>
+<li><code>CHORAL_POLYPHONY</code> – multiple voices with equal status,
+minimal mediation</li>
+</ol>
+<h3 id="definitions">5.1 Definitions</h3>
+<hr />
+<h3 id="decision-procedure-1">5.2 Decision procedure</h3>
+<hr />
+<h2 id="appendix-quick-reference">Appendix: Quick reference</h2>
+<h3 id="a.1-referent-categories-9-core">A.1 Referent categories (9
+core)</h3>
+<ol type="1">
+<li>SELF – poet/individual</li>
+<li>INTIMATE – family/close friends</li>
+<li>LOCAL – city/community/unit</li>
+<li>NATION – Ukrainian collective</li>
+<li>STATE – government/institutions</li>
+<li>ENEMY – Russia/occupiers</li>
+<li>SUPRANATIONAL – Europe/world/humanity</li>
+<li>OTHER – other identifiable groups</li>
+<li>UNCERTAIN – unresolvable</li>
+</ol>
+<h3 id="a.2-inclusivity-scale-3-level">A.2 Inclusivity scale
+(3-level)</h3>
+<ol type="1">
+<li>INCLUSIVE – includes addressee</li>
+<li>EXCLUSIVE – excludes addressee</li>
+<li>AMBIGUOUS – unclear/strategic ambiguity</li>
+</ol>
+<h3 id="a.3-polyphony-types-3">A.3 Polyphony types (3)</h3>
+<ol type="1">
+<li>MONOLOGIC – single voice</li>
+<li>MEDIATED_POLYPHONY – narrator collects voices</li>
+<li>CHORAL_POLYPHONY – multiple equal voices</li>
+</ol>
+<hr />
+</body>
+</html>
