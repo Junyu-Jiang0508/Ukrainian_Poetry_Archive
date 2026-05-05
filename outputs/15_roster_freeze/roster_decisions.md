@@ -35,3 +35,12 @@
 
 - `>=5` preserves cross-period continuity while avoiding over-pruning persistent poets.
 - `>=8` roster exported as robustness check to guard against threshold-driven conclusions.
+
+
+## 2026-05-05 Post-freeze audit note (v2 modeling path)
+
+- Discrepancy source identified: v2 modeling used analysis-feasible poem subset requiring 1/2-person pronoun availability and `n12 >= 5` per poem, which was stricter than v1 roster freeze basis.
+- This filter reduces feasible cohort from 12 included authors to 9 under the same period threshold (>=5 per period).
+- New feasible roster file: `outputs/15_roster_freeze/roster_v2_n12ge5_frozen.csv`.
+- Authors dropped by feasibility rule: `Andrij Bondar`, `Ivan Andrusiak`, `Ludmila Khersonskaya` (plus already-excluded `Alie Kenzhalieva`).
+- Refit requirement: all v2 confirmatory/typology outputs should be interpreted only after refit on the 9-author feasible roster.
