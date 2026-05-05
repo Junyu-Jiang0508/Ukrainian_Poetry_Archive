@@ -1,0 +1,14 @@
+author,n_p1,n_p2,n_p3,min_per_period,total,included,is_bilingual_switcher,exclusion_reason,dominant_language_p1,dominant_language_p3
+Ihor Mitrov,51,45,58,45,154,True,False,,Ukrainian,Ukrainian
+Serhiy Zhadan,58,26,13,13,97,True,False,,Ukrainian,Ukrainian
+Anton Polunin,52,20,21,20,93,True,False,,Ukrainian,Ukrainian
+Iya Kiva,19,34,12,12,65,True,True,,Russian,Russian
+Kateryna Kalytko,9,23,28,9,60,True,False,,Ukrainian,Ukrainian
+Andrij Bondar,22,14,22,14,58,True,True,,Russian,Russian
+Alex Averbuch,12,34,11,11,57,True,True,,Ukrainian,Ukrainian
+Mykhailo Zharzhailo,12,21,21,12,54,True,False,,Ukrainian,Ukrainian
+Elizaveta Zharikova,14,23,16,14,53,True,False,,Ukrainian,Ukrainian
+Olena Boryshpolets,9,18,14,9,41,True,True,,Russian,Ukrainian
+Ludmila Khersonskaya,11,17,6,6,34,True,False,,Russian,Russian
+Ivan Andrusiak,5,6,13,5,24,True,False,,Ukrainian,Ukrainian
+Alie Kenzhalieva,15,147,49,15,211,False,False,Category error: Crimean Tatar/Russian bilingual voice (exclude whole author).,Russian,Russian
