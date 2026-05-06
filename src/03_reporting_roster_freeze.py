@@ -19,7 +19,7 @@ DEFAULT_LAYER0 = ROOT / "data" / "To_run" / "00_filtering" / "layer0_poems_one_p
 DEFAULT_OUT = ROOT / "outputs" / "03_reporting_roster_freeze"
 DEFAULT_PREREG = ROOT / "preregistration" / "contrasts_v1.md"
 
-PERIOD_ORDER = ["P1_2014_2018", "P2_2019_2021", "P3_2022_plus"]
+PERIOD_ORDER = ["P1_2014_2021", "P2_2022_plus"]
 SWITCHERS = {"Iya Kiva", "Olena Boryshpolets", "Alex Averbuch", "Andrij Bondar"}
 QIRIMLI_CODES = {"Qirimli", "Russian, Qirimli", "Ukrainian, Qirimli"}
 AUTHOR_EXCLUSIONS = {"Alie Kenzhalieva": "Category error: Crimean Tatar/Russian bilingual voice (exclude whole author)."}
@@ -29,12 +29,10 @@ def _period3(year: float) -> str:
     if pd.isna(year):
         return "OUTSIDE"
     y = int(year)
-    if 2014 <= y <= 2018:
+    if 2014 <= y <= 2021:
         return PERIOD_ORDER[0]
-    if 2019 <= y <= 2021:
-        return PERIOD_ORDER[1]
     if y >= 2022:
-        return PERIOD_ORDER[2]
+        return PERIOD_ORDER[1]
     return "OUTSIDE"
 
 
@@ -71,13 +69,12 @@ def build_roster(per_poem_path: Path, out_dir: Path, min_per_period: int = 5) ->
     )
     counts = counts.rename(
         columns={
-            "P1_2014_2018": "n_p1",
-            "P2_2019_2021": "n_p2",
-            "P3_2022_plus": "n_p3",
+            "P1_2014_2021": "n_p1",
+            "P2_2022_plus": "n_p2",
         }
     )
-    counts["min_per_period"] = counts[["n_p1", "n_p2", "n_p3"]].min(axis=1).astype(int)
-    counts["total"] = counts[["n_p1", "n_p2", "n_p3"]].sum(axis=1).astype(int)
+    counts["min_per_period"] = counts[["n_p1", "n_p2"]].min(axis=1).astype(int)
+    counts["total"] = counts[["n_p1", "n_p2"]].sum(axis=1).astype(int)
     counts = counts[counts["min_per_period"].ge(min_per_period)].copy()
     counts["included"] = True
     counts["is_bilingual_switcher"] = counts.index.isin(SWITCHERS)
@@ -88,10 +85,10 @@ def build_roster(per_poem_path: Path, out_dir: Path, min_per_period: int = 5) ->
             counts.loc[author, "included"] = False
             counts.loc[author, "exclusion_reason"] = reason
 
-    dom_p1 = _dominant_language(df, "P1_2014_2018")
-    dom_p3 = _dominant_language(df, "P3_2022_plus")
+    dom_p1 = _dominant_language(df, "P1_2014_2021")
+    dom_p2 = _dominant_language(df, "P2_2022_plus")
     counts["dominant_language_p1"] = counts.index.map(dom_p1).fillna("")
-    counts["dominant_language_p3"] = counts.index.map(dom_p3).fillna("")
+    counts["dominant_language_p2"] = counts.index.map(dom_p2).fillna("")
     counts = counts.sort_values(["included", "total"], ascending=[False, False]).reset_index()
     counts = counts.rename(columns={"index": "author"})
 
@@ -223,7 +220,7 @@ def write_decisions_md(out_dir: Path, roster: pd.DataFrame, bondar_spot: pd.Data
         "",
         f"- Decision date: {today}",
         "- Baseline source: `outputs/03_reporting_descriptive_statistics/C_poem_perspective_derived_per_poem.csv` (post layer0 exclusions).",
-        "- Time bins fixed: P1=2014-2018, P2=2019-2021, P3=2022+.",
+        "- Time bins fixed: P1=2014-2021, P2=2022+.",
         "- Author inclusion threshold fixed before modeling: >=5 poems in each period.",
         f"- Robustness roster also recorded at >=8 poems/period (n={ge8_n}).",
         "- Qirimli family exclusion applied at code-level: `Qirimli`, `Russian, Qirimli`, `Ukrainian, Qirimli`.",
