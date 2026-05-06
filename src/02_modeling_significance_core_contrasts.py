@@ -159,7 +159,22 @@ def fit_glm(long_df: pd.DataFrame):
     return smf.glm(FORMULA, data=long_df, family=sm.families.Binomial(), freq_weights=long_df["n"]).fit()
 
 
-def evaluate_contrasts(fit, long_df: pd.DataFrame) -> pd.DataFrame:
+def fit_glm_clustered_author(fit, long_df: pd.DataFrame):
+    groups = long_df["author"].astype(str)
+    if groups.nunique() < 2:
+        return None
+    try:
+        return smf.glm(
+            FORMULA,
+            data=long_df,
+            family=sm.families.Binomial(),
+            freq_weights=long_df["n"],
+        ).fit(cov_type="cluster", cov_kwds={"groups": groups})
+    except Exception:
+        return None
+
+
+def evaluate_contrasts(fit, long_df: pd.DataFrame, p_value_col: str = "p_value") -> pd.DataFrame:
     names = fit.params.index.tolist()
     tests = _build_contrast_specs(names)
     cov = fit.cov_params().to_numpy(dtype=float)
@@ -176,7 +191,7 @@ def evaluate_contrasts(fit, long_df: pd.DataFrame) -> pd.DataFrame:
                 "estimate_logit": est,
                 "se": se,
                 "z_value": z,
-                "p_value": p,
+                p_value_col: p,
                 "ci95_low": est - 1.96 * se if np.isfinite(se) else np.nan,
                 "ci95_high": est + 1.96 * se if np.isfinite(se) else np.nan,
                 "odds_ratio": float(np.exp(est)),
@@ -185,7 +200,7 @@ def evaluate_contrasts(fit, long_df: pd.DataFrame) -> pd.DataFrame:
             }
         )
     out = pd.DataFrame(rows)
-    out["q_value_bh_confirmatory_family"] = bh_adjust(out["p_value"])
+    out[f"q_value_bh_{p_value_col}_family"] = bh_adjust(out[p_value_col])
     return out
 
 
@@ -359,10 +374,57 @@ def main() -> None:
     long_ge8 = build_poem_long_4cells(poem_cell, args.min_n12_per_poem, roster_ge8)
 
     fit_main = fit_glm(long_main)
-    confirm_main = evaluate_contrasts(fit_main, long_main)
+    fit_main_cluster = fit_glm_clustered_author(fit_main, long_main)
+    confirm_naive = evaluate_contrasts(fit_main, long_main, p_value_col="p_value_naive_glm")
+    if fit_main_cluster is not None:
+        confirm_cluster = evaluate_contrasts(fit_main_cluster, long_main, p_value_col="p_value_clustered_author")
+    else:
+        confirm_cluster = confirm_naive.rename(
+            columns={
+                "se": "se",
+                "z_value": "z_value",
+                "p_value_naive_glm": "p_value_clustered_author",
+                "q_value_bh_p_value_naive_glm_family": "q_value_bh_p_value_clustered_author_family",
+            }
+        )
     wb_df, wb_log = wild_cluster_bootstrap(long_main, fit_main, args.bootstrap_reps, args.bootstrap_seed)
+    confirm_main = confirm_cluster.merge(
+        confirm_naive[
+            [
+                "contrast",
+                "se",
+                "z_value",
+                "p_value_naive_glm",
+                "q_value_bh_p_value_naive_glm_family",
+            ]
+        ].rename(columns={"se": "se_naive_glm", "z_value": "z_value_naive_glm"}),
+        on="contrast",
+        how="left",
+    )
+    confirm_main = confirm_main.rename(columns={"se": "se_clustered_author", "z_value": "z_value_clustered_author"})
     confirm_main = confirm_main.merge(wb_df, on="contrast", how="left")
     confirm_main["q_value_bh_wild_bootstrap_family"] = bh_adjust(confirm_main["p_value_wild_bootstrap"])
+    confirm_main = confirm_main[
+        [
+            "contrast",
+            "estimate_logit",
+            "p_value_wild_bootstrap",
+            "q_value_bh_wild_bootstrap_family",
+            "p_value_clustered_author",
+            "q_value_bh_p_value_clustered_author_family",
+            "p_value_naive_glm",
+            "q_value_bh_p_value_naive_glm_family",
+            "se_clustered_author",
+            "z_value_clustered_author",
+            "se_naive_glm",
+            "z_value_naive_glm",
+            "ci95_low",
+            "ci95_high",
+            "odds_ratio",
+            "n_poems",
+            "n_rows_long",
+        ]
+    ]
     confirm_main.to_csv(out / "confirmatory_contrasts_main.csv", index=False)
     pd.DataFrame({"term": fit_main.params.index, "coef": fit_main.params.values, "p_value": fit_main.pvalues.values}).to_csv(
         out / "unified_model_coefficients.csv", index=False
@@ -399,6 +461,8 @@ def main() -> None:
         f.write("# Two-period confirmatory model outputs\n\n")
         f.write("- Main family includes 6 confirmatory contrasts with BH correction.\n")
         f.write("- Wild cluster bootstrap uses Rademacher weights by author cluster.\n")
+        f.write("- Interpret `p_value_wild_bootstrap` as the primary inferential result for small-cluster validity.\n")
+        f.write("- `p_value_naive_glm` is reported for reference only because it ignores author clustering.\n")
 
     print(f"Wrote two-period outputs to: {out}")
 

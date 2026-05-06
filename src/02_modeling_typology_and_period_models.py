@@ -25,6 +25,7 @@ DEFAULT_OUT = ROOT / "outputs" / "02_modeling_typology_and_period_models"
 PERIODS = ["P1_2014_2021", "P2_2022_plus"]
 CELL4 = ["1sg", "1pl", "2sg", "2pl"]
 SWITCHERS = {"Iya Kiva", "Andrij Bondar", "Alex Averbuch", "Olena Boryshpolets"}
+QIRIMLI_CODES = {"Qirimli", "Russian, Qirimli", "Ukrainian, Qirimli"}
 
 
 def load_and_filter(path: Path, layer0_path: Path) -> pd.DataFrame:
@@ -35,6 +36,7 @@ def load_and_filter(path: Path, layer0_path: Path) -> pd.DataFrame:
     df["person"] = df["person"].fillna("").str.strip()
     df["number"] = df["number"].fillna("").str.strip()
     df["person_number"] = pronoun_class_sixway_column(df)
+    df["language_clean"] = df["language"].fillna("").str.strip()
     if "is_repeat" in df.columns and "is_translation" in df.columns:
         df["is_repeat"] = normalize_bool_flag(df["is_repeat"])
         df["is_translation"] = normalize_bool_flag(df["is_translation"])
@@ -55,7 +57,9 @@ def load_and_filter(path: Path, layer0_path: Path) -> pd.DataFrame:
         df = df.merge(flags, on="poem_id", how="left")
         df["is_repeat"] = df["is_repeat"].fillna(False).astype(bool)
         df["is_translation"] = df["is_translation"].fillna(False).astype(bool)
-    return df.loc[~(df["is_repeat"] | df["is_translation"])].copy()
+    out = df.loc[~(df["is_repeat"] | df["is_translation"])].copy()
+    out = out[~out["language_clean"].isin(QIRIMLI_CODES)].copy()
+    return out
 
 
 def load_roster(roster_path: Path) -> list[str]:

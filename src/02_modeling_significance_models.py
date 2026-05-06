@@ -22,7 +22,8 @@ DEFAULT_OUTPUT = ROOT / "outputs" / "02_modeling_significance_models"
 
 PERIOD_PRE = "pre_2022"
 PERIOD_POST = "post_2022"
-MAJOR_LANGUAGES = ["Ukrainian", "Russian", "Qirimli"]
+MAJOR_LANGUAGES = ["Ukrainian", "Russian"]
+QIRIMLI_CODES = {"Qirimli", "Russian, Qirimli", "Ukrainian, Qirimli"}
 PROP_FEATURES = ["prop_1st", "prop_2nd", "prop_3rd", "prop_plural", "prop_pro_drop"]
 SIXWAY_ORDER = ["1sg", "1pl", "2sg", "2pl", "3sg", "3pl"]
 
@@ -76,7 +77,9 @@ def attach_repeat_translation_and_filter(
         df["is_translation"] = df["is_translation"].fillna(False).astype(bool)
     else:
         df = df.assign(is_repeat=False, is_translation=False)
-    return df.loc[~(df["is_repeat"] | df["is_translation"])].copy()
+    out = df.loc[~(df["is_repeat"] | df["is_translation"])].copy()
+    out = out[~out["language_clean"].isin(QIRIMLI_CODES)].copy()
+    return out
 
 
 def build_poem_props(df: pd.DataFrame) -> pd.DataFrame:
