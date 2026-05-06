@@ -1,11 +1,14 @@
 """Compare manual_annotation_result.csv to GPT (detailed or test); write metrics and error CSV."""
 import os
-from pathlib import Path
+
+import repo_bootstrap
+
+repo_bootstrap.prepare_repo(__file__)
 
 import pandas as pd
 from sklearn.metrics import precision_recall_fscore_support
 
-os.chdir(Path(__file__).resolve().parent.parent.parent)
+from utils.label_normalization import normalize_person_number_label
 
 MANUAL_FILE = "outputs/01_pronoun_detection/manual_annotation_result.csv"
 GPT_DETAILED_FILE = "outputs/01_pronoun_detection/gpt_annotation_detailed.csv"
@@ -16,15 +19,6 @@ METRICS_OUTPUT = "outputs/01_pronoun_detection/validation_metrics.csv"
 
 def _normalize_sent(s: str) -> str:
     return " ".join(str(s).strip().split())
-
-
-def _norm_cat(s: str) -> str:
-    s = str(s).strip() if pd.notna(s) else ""
-    if s in ("Sing", "Sg"):
-        return "Singular"
-    if s in ("Plur", "Pl"):
-        return "Plural"
-    return s
 
 
 def _prepare_gpt_detailed(gpt_df: pd.DataFrame) -> pd.DataFrame:
@@ -40,9 +34,9 @@ def _prepare_gpt_detailed(gpt_df: pd.DataFrame) -> pd.DataFrame:
     })
     gpt_df["context"] = gpt_df["context_sentence_ukr"]
     if "person" in gpt_df.columns:
-        gpt_df["person"] = gpt_df["person"].apply(_norm_cat)
+        gpt_df["person"] = gpt_df["person"].apply(normalize_person_number_label)
     if "number" in gpt_df.columns:
-        gpt_df["number"] = gpt_df["number"].apply(_norm_cat)
+        gpt_df["number"] = gpt_df["number"].apply(normalize_person_number_label)
     cols = ["ID", "pronoun", "is_dropped", "context", "context_norm"]
     for c in ["person", "number"]:
         if c in gpt_df.columns:

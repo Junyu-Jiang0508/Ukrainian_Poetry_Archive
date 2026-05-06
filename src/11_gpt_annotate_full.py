@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+from utils.workspace import repository_root
+
+ROOT = repository_root()
 ANNOTATOR = ROOT / "src" / "07_gpt_annotation.py"
 
 

@@ -344,5 +344,7 @@ def main():
 
 
 if __name__ == "__main__":
-    os.chdir(Path(__file__).resolve().parent.parent)
+    from utils.workspace import prepare_analysis_environment
+
+    prepare_analysis_environment(__file__, matplotlib_backend=None)
     main()

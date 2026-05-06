@@ -1,11 +1,12 @@
 """Merge two manual annotator CSVs; align GPT detailed; write confusion matrices and metrics (no API)."""
 import os
-from pathlib import Path
+
+import repo_bootstrap
+
+repo_bootstrap.prepare_repo(__file__)
 
 import pandas as pd
 from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
-
-os.chdir(Path(__file__).resolve().parent.parent.parent)
 
 DATA_DIR = "data"
 ANNOTATIONS_DIR = os.path.join(DATA_DIR, "annotations")

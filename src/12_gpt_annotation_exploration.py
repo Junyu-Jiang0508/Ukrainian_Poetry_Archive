@@ -1,33 +1,39 @@
 """Explore GPT annotation fields: distributions, missingness, period crosstabs."""
 
 from pathlib import Path
-import pandas as pd
-import numpy as np
-import matplotlib
-matplotlib.use("Agg")
+
+from utils.annotation_cohort import load_gpt_annotation_derived
+from utils.annotation_derived_columns import CORE_TEMPORAL_PERIOD_ORDER
+from utils.workspace import gpt_public_annotation_detailed_csv, prepare_analysis_environment
+
+ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
-import os
 
-os.chdir(Path(__file__).resolve().parent.parent)
-
-INPUT_CSV = Path("data/processed/gpt_annotation_public_run/gpt_annotation_detailed.csv")
-OUTPUT_DIR = Path("outputs/12_gpt_annotation_exploration")
+INPUT_CSV = gpt_public_annotation_detailed_csv(ROOT)
+OUTPUT_DIR = ROOT / "outputs/12_gpt_annotation_exploration"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 SEMANTIC_FIELDS = [
-    "we_type",
+    "we_inclusivity",
     "addressee_type",
-    "dominant_referent_level",
+    "dominant_referent_category",
     "poem_perspective_primary",
     "poem_perspective_secondary",
+    "polyphony_type",
 ]
 
-PERIOD_ORDER = ["pre_2014", "2014_2021", "post_2022", "unknown"]
+# Crosstabs / contrasts that need dated bins (exclude unknown; pre_2014 appendix-only)
+KNOWN_DATED_PERIODS = ["pre_2014", "2014_2021", "post_2022"]
+CORE_TEMPORAL_PERIODS = CORE_TEMPORAL_PERIOD_ORDER
 
 
 def load_data() -> pd.DataFrame:
-    df = pd.read_csv(INPUT_CSV, low_memory=False, on_bad_lines="skip")
+    df = load_gpt_annotation_derived(INPUT_CSV)
+    df["temporal_period_for_analysis"] = df["temporal_period_reconciled"]
     print(f"Loaded {len(df)} rows, {df['original_id'].nunique()} unique poems")
     return df
 
@@ -36,6 +42,8 @@ def field_distributions(df: pd.DataFrame) -> pd.DataFrame:
     """Compute value counts, missing rate, and unique count for each semantic field."""
     records = []
     for field in SEMANTIC_FIELDS + ["qa_flag"]:
+        if field not in df.columns:
+            continue
         total = len(df)
         missing = df[field].isna().sum()
         empty_str = (df[field].astype(str).str.strip() == "").sum() - missing
@@ -85,24 +93,26 @@ def missing_summary(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def crosstab_by_period(df: pd.DataFrame):
-    """Cross-tabulate each semantic field by temporal_period. Save CSV + heatmap."""
-    known_periods = ["pre_2014", "2014_2021", "2014_2022", "post_2022"]
-    df_known = df[df["temporal_period"].isin(known_periods)].copy()
-    actual_periods = [p for p in known_periods if p in df_known["temporal_period"].unique()]
-    df_known["temporal_period"] = pd.Categorical(
-        df_known["temporal_period"], categories=actual_periods, ordered=True,
+    """Cross-tabulate each semantic field by reconciled temporal period. Save CSV + heatmap."""
+    tcol = "temporal_period_for_analysis"
+    df_known = df[df[tcol].isin(KNOWN_DATED_PERIODS)].copy()
+    actual_periods = [p for p in KNOWN_DATED_PERIODS if p in df_known[tcol].unique()]
+    df_known[tcol] = pd.Categorical(
+        df_known[tcol], categories=actual_periods, ordered=True,
     )
 
     for field in SEMANTIC_FIELDS:
-        ct_count = pd.crosstab(df_known[field], df_known["temporal_period"], margins=True)
+        if field not in df_known.columns:
+            continue
+        ct_count = pd.crosstab(df_known[field], df_known[tcol], margins=True)
         ct_count.to_csv(OUTPUT_DIR / f"crosstab_{field}_count.csv")
 
-        ct_pct = pd.crosstab(df_known[field], df_known["temporal_period"], normalize="columns") * 100
+        ct_pct = pd.crosstab(df_known[field], df_known[tcol], normalize="columns") * 100
         ct_pct.to_csv(OUTPUT_DIR / f"crosstab_{field}_pct.csv")
 
         fig, ax = plt.subplots(figsize=(10, max(4, len(ct_pct) * 0.5)))
         sns.heatmap(ct_pct, annot=True, fmt=".1f", cmap="YlOrRd", ax=ax)
-        ax.set_title(f"{field} distribution (%) by period")
+        ax.set_title(f"{field} distribution (%) by period (reconciled)")
         ax.set_ylabel(field)
         ax.set_xlabel("Period")
         fig.tight_layout()
@@ -112,9 +122,9 @@ def crosstab_by_period(df: pd.DataFrame):
 
 
 def pronoun_class_by_period(df: pd.DataFrame):
-    """Summarize pronoun person/number by period for consistency check with breakpoint regression."""
-    known_periods = ["pre_2014", "2014_2021", "2014_2022", "post_2022"]
-    df_known = df[df["temporal_period"].isin(known_periods)].copy()
+    """Summarize pronoun person/number by reconciled period (core = 2014_2021 vs post_2022)."""
+    tcol = "temporal_period_for_analysis"
+    df_known = df[df[tcol].isin(KNOWN_DATED_PERIODS)].copy()
     df_valid = df_known.dropna(subset=["person", "number"])
 
     def classify(row):
@@ -133,10 +143,15 @@ def pronoun_class_by_period(df: pd.DataFrame):
 
     df_valid = df_valid.copy()
     df_valid["pronoun_class"] = df_valid.apply(classify, axis=1)
-    ct = pd.crosstab(df_valid["pronoun_class"], df_valid["temporal_period"])
-    ct_pct = pd.crosstab(df_valid["pronoun_class"], df_valid["temporal_period"], normalize="columns") * 100
+    ct = pd.crosstab(df_valid["pronoun_class"], df_valid[tcol])
+    ct_pct = pd.crosstab(df_valid["pronoun_class"], df_valid[tcol], normalize="columns") * 100
     ct.to_csv(OUTPUT_DIR / "pronoun_class_by_period_count.csv")
     ct_pct.to_csv(OUTPUT_DIR / "pronoun_class_by_period_pct.csv")
+    df_core = df_valid[df_valid[tcol].isin(CORE_TEMPORAL_PERIODS)]
+    ct_core = pd.crosstab(df_core["pronoun_class"], df_core[tcol])
+    ct_core_pct = pd.crosstab(df_core["pronoun_class"], df_core[tcol], normalize="columns") * 100
+    ct_core.to_csv(OUTPUT_DIR / "pronoun_class_core_temporal_count.csv")
+    ct_core_pct.to_csv(OUTPUT_DIR / "pronoun_class_core_temporal_pct.csv")
     print("\nPronoun class by period (%):")
     print(ct_pct.round(1).to_string())
 
@@ -152,10 +167,11 @@ def qa_flag_summary(df: pd.DataFrame):
 
 def poem_level_summary(df: pd.DataFrame):
     """One row per poem: perspective, pronoun counts, period."""
+    tcol = "temporal_period_for_analysis"
     poems = df.groupby("original_id").agg(
         author=("author", "first"),
         year=("year", "first"),
-        temporal_period=("temporal_period", "first"),
+        temporal_period=(tcol, "first"),
         perspective_primary=("poem_perspective_primary", "first"),
         perspective_secondary=("poem_perspective_secondary", "first"),
         n_pronoun_rows=("pronoun_word", "count"),
@@ -164,7 +180,7 @@ def poem_level_summary(df: pd.DataFrame):
     poems.to_csv(OUTPUT_DIR / "poem_level_summary.csv", index=False)
     print(f"\nPoem-level summary: {len(poems)} poems")
 
-    df_known = poems[poems["temporal_period"].isin(["pre_2014", "2014_2021", "2014_2022", "post_2022"])]
+    df_known = poems[poems["temporal_period"].isin(KNOWN_DATED_PERIODS)]
     ct = pd.crosstab(df_known["perspective_primary"], df_known["temporal_period"])
     ct.to_csv(OUTPUT_DIR / "perspective_primary_by_period.csv")
     print("Perspective primary by period:")
@@ -173,10 +189,11 @@ def poem_level_summary(df: pd.DataFrame):
 
 
 def temporal_period_overview(df: pd.DataFrame):
-    print("\nTemporal period overview:")
-    vc = df["temporal_period"].value_counts()
+    print("\nTemporal period overview (reconciled from year when available):")
+    tcol = "temporal_period_for_analysis"
+    vc = df[tcol].value_counts()
     for v, c in vc.items():
-        n_poems = df[df["temporal_period"] == v]["original_id"].nunique()
+        n_poems = df[df[tcol] == v]["original_id"].nunique()
         print(f"  {v}: {c} rows, {n_poems} poems")
 
 

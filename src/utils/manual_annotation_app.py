@@ -1,13 +1,14 @@
 """Manual pronoun annotation app. Output format matches gpt_annotation_test_result.csv."""
 import json
 import os
-from pathlib import Path
+
+import repo_bootstrap
+
+repo_bootstrap.prepare_repo(__file__)
 
 import numpy as np
 import pandas as pd
 import streamlit as st
-
-os.chdir(Path(__file__).resolve().parent.parent.parent)
 
 OUTPUT_COLUMNS = [
     "ID", "author", "date", "Language", "text", "Theme",

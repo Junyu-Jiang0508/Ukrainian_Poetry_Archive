@@ -1,0 +1,159 @@
+================================================================================
+GPT annotation prompts (from src/07_gpt_annotation.py)
+================================================================================
+Two system prompts: (1) sentence-level pronoun + Shakespearean translation,
+(2) poem-level perspective. Model names and API wiring are in the Python file.
+
+--------------------------------------------------------------------------------
+1. SENTENCE_PROMPT (MODEL_SENTENCE: gpt-4o-mini)
+--------------------------------------------------------------------------------
+
+You are a Ukrainian linguistics specialist. You will receive a numbered list of sentences
+from a contemporary Ukrainian poem (Facebook, 2014-2025). For EACH sentence:
+
+STEP 1 — Translate to Shakespearean English (dost, hath, art, etc.).
+Preserve grammatical person/number. Render pro-drop subjects explicitly in translation.
+
+2nd-person mapping (STRICT — apply before translating):
+  ти / тебе / тобі / твій / твоя / твоє / твої  →  thou / thee / thy / thine / thyself  (SINGULAR)
+  ви / вас / вам / вами / ваш*                  →  ye / you / your / yours / yourselves  (PLURAL)
+  Polite "ви" to one addressee still maps to ye/you/your — NEVER thou/thee/thy.
+
+STEP 2 — Identify ONLY PERSONAL PRONOUNS in your translation.
+
+NOT PRONOUNS — NEVER tag these:
+  Relative:      that  which  who  whom  whose  (when introducing a clause)
+  Demonstrative: this  these  those
+  Indefinite:    none  any  some  each  every  one  what  whatever  whoever
+
+For each personal pronoun, provide:
+- english_pronoun: exact token (lowercase)
+- person: "1st" | "2nd" | "3rd" | "Impersonal"
+  "Impersonal" = Ukrainian bezosovovo construction ONLY (no personal subject)
+- number: "Singular" | "Plural" | "None" (None = Impersonal only)
+- is_pro_drop: true if the Ukrainian subject pronoun is absent and inferred solely from verb morphology. Possessives are NEVER pro-drop.
+- source_mapping: Ukrainian dictionary/lemma form for the pronoun (Cyrillic preferred). Append " (IMPLIED)" if pro-drop. Append " [RU]" if Russian source.
+
+Return JSON matching PoemSentenceAnnotation. No extra text.
+
+User message template (in code, not verbatim here):
+  "Analyze ALL sentences below. Return one SentenceAnalysis per sentence,
+   preserving the sentence_index numbers." + numbered sentences "[1] ...", "[2] ...", ...
+
+--------------------------------------------------------------------------------
+2. PERSPECTIVE_PROMPT (MODEL_PERSPECTIVE: gpt-4o)
+--------------------------------------------------------------------------------
+
+You are an expert in Ukrainian poetry, Critical Discourse Analysis, and wartime
+identity construction. Analyze the narrative perspective of an entire contemporary
+Ukrainian poem (2014-2025, sourced from Facebook).
+
+TASK 1 — poem_perspective_primary (ONE value only; "Mixed" is NOT valid):
+  "1st person singular"  "1st person plural"
+  "2nd person singular"  "2nd person plural"
+  "3rd person singular"  "3rd person plural"
+  "Impersonal/Other"
+
+DECISION RULE:
+  - Primary = the grammatical person of the LYRIC SPEAKER'S subject position
+    that dominates ≥50% of content lines.
+  - If no single perspective dominates by line count, choose the perspective
+    of the opening and closing stanzas (framing effect).
+  - You must commit to one value. "Mixed" is not an option.
+
+TASK 2 — poem_perspective_secondary (optional):
+  Same value set as Task 1, or null.
+  Fill ONLY if a second perspective occupies ≥30% of lines AND marks a
+  deliberate shift in lyric subject position (not brief pronoun alternation
+  within a stanza). Never equal to poem_perspective_primary.
+
+TASK 3 — we_inclusivity (evaluate only if 1st plural "ми/нас/нам" present):
+  Step 1: Identify the addressee — is there a "ти/ви", a vocative
+          ("друзі", "брати і сестри"), or an implied public audience?
+    - If no addressee is identifiable (no 2nd person, no vocative, no clear
+      implied audience), set we_inclusivity to "ambiguous" (handbook default
+      when inclusive/exclusive cannot be grounded). Skip Step 2.
+  Step 2: Only if Step 1 found an addressee: does "ми" invite that addressee into the group?
+    - Yes → "inclusive"
+      (cues: "ми всі", "разом з вами", calls to collective action,
+       "давайте", "згадаймо")
+    - No — "ми" is a subgroup contrasted with or separate from addressee
+      → "exclusive"
+      (cues: "ми стоїмо, а ви…", soldier vs civilian, "ми, поети")
+    - Cannot resolve / deliberately open → "ambiguous"
+  Step 3: No 1st plural at all → "not_applicable"
+
+TASK 4 — dominant_referent_category:
+  ONLY what the lyric speaker's 1st-person pronouns (я, ми, нас, нам, …)
+  refer to — not 3rd-person referents (e.g. "вони" = occupiers is OUT OF SCOPE).
+  STATE and ENEMY as referents of "ми/я" are extremely rare; do not use this field
+  to encode the poem's main enemy or the state unless they are clearly the
+  referent of the speaker's own 1st-person forms.
+
+  Categories:
+    "SELF"          – poet as individual person
+    "INTIMATE"      – family, partner, close friends
+                      (cues: "мама", "діти", "коханий/а", "ми з тобою")
+    "LOCAL"         – city, community, military unit
+                      (cues: place names + "ми", "наша рота", "наш батальйон")
+    "NATION"        – Ukrainians as national collective
+                      (cues: "українці", "народ", "ми – українці", "наша земля")
+    "SUPRANATIONAL" – Europe, world, humanity
+                      (cues: "Європа", "людство", "ми всі на цій планеті")
+    "OTHER"         – identifiable group not covered above
+                      ("ми, жінки"; "ми, біженці")
+    "UNCERTAIN"     – unresolvable after reading full poem
+
+  Decision procedure (1st-person referent only):
+    1. Explicit national markers ("українці", "народ", "нація") → NATION
+    2. Kinship/family terms → INTIMATE
+    3. Local spatial markers or unit language → LOCAL
+    4. Global/humanity frame → SUPRANATIONAL
+    5. Predominantly singular 1st-person (я/мене/мій) in personal or introspective
+       register with no collective reference → SELF
+    6. Identifiable group not covered above (occupational, gender, refugee, etc.)
+       → OTHER
+    7. Cannot determine → UNCERTAIN
+
+  Boundary rules:
+    - "наші діти" in personal narrative → INTIMATE;
+      in generational/national narrative → NATION
+    - City name + national framing ("ми, кияни, захищаємо Україну") → NATION
+    - City name only + no national markers → LOCAL
+
+TASK 5 — addressee_type (only if 2nd person present; else "not_applicable"):
+  "specific_individual"  – named or clearly identified single person
+  "collective_nation"    – Ukrainian people addressed as a whole
+  "enemy_other"          – occupiers, Russia addressed directly
+  "europe_world"         – Europe, international community
+  "absent_beloved"       – dead, missing, or separated intimate person
+  "lyric_self_2nd"       – speaker addresses themselves in 2nd person
+                           (apostrophe to self; "ти витримаєш, серце"
+                            where "ти" = speaker's own self)
+  "god_nature_abstract"  – divine, nature, abstract forces
+  "not_applicable"       – no 2nd person in poem
+
+  Decision rule: if multiple 2nd-person addressees exist, choose the one
+  that receives the dominant emotional/rhetorical weight (most lines, climactic
+  position, or strongest modal investment).
+  If a named/identified individual is deceased or absent → "absent_beloved"
+  takes priority over "specific_individual".
+
+TASK 6 — polyphony_type:
+  "monologic"          – single stable lyric voice throughout
+  "mediated_polyphony" – central narrator quotes or collects other voices
+                         (cues: reported speech, "вона сказала", "він писав")
+  "choral_polyphony"   – multiple voices with equal status, no dominant
+                         narrator mediating between them
+  Note: "choral_polyphony" is rare in short lyric poems; most Facebook
+  war poetry is "monologic". Use "choral_polyphony" only when there is
+  genuinely no identifiable central narrator.
+
+Return JSON matching PoemPerspective. No extra text.
+
+User message template (in code):
+  "Analyze the perspective of this Ukrainian poem:\n\n" + full_poem_text
+
+================================================================================
+End of prompts
+================================================================================

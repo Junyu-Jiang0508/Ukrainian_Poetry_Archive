@@ -1,24 +1,18 @@
 """Validate manual vs GPT on data/annotations/manual_annotation_merged_with_gpt.csv."""
 import os
-from pathlib import Path
+
+import repo_bootstrap
+
+repo_bootstrap.prepare_repo(__file__)
 
 import pandas as pd
 from sklearn.metrics import precision_recall_fscore_support
 
-os.chdir(Path(__file__).resolve().parent.parent.parent)
+from utils.label_normalization import normalize_person_number_label
 
 MERGED_FILE = os.path.join("data", "annotations", "manual_annotation_merged_with_gpt.csv")
 METRICS_OUTPUT = os.path.join("outputs", "01_pronoun_detection", "validation_merged_metrics.csv")
 ERROR_OUTPUT = os.path.join("outputs", "01_pronoun_detection", "validation_merged_errors.csv")
-
-
-def _norm_cat(s) -> str:
-    s = str(s).strip() if pd.notna(s) else ""
-    if s in ("Sing", "Sg"):
-        return "Singular"
-    if s in ("Plur", "Pl"):
-        return "Plural"
-    return s
 
 
 def main():
@@ -35,9 +29,9 @@ def main():
 
     for col in ["person", "number"]:
         if col in df.columns:
-            df[f"{col}_norm"] = df[col].apply(_norm_cat)
+            df[f"{col}_norm"] = df[col].apply(normalize_person_number_label)
         if f"{col}_gpt" in df.columns:
-            df[f"{col}_gpt_norm"] = df[f"{col}_gpt"].apply(_norm_cat)
+            df[f"{col}_gpt_norm"] = df[f"{col}_gpt"].apply(normalize_person_number_label)
 
     manual_drop = df["is_dropped"].fillna(False).astype(bool)
     gpt_drop = df["is_dropped_gpt"].fillna(False).astype(bool)

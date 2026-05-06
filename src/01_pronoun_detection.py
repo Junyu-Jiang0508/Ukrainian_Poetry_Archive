@@ -6,7 +6,12 @@ import json
 import time
 from collections import Counter
 import matplotlib.pyplot as plt
-from pathlib import Path
+
+from utils.workspace import prepare_analysis_environment
+from utils.stage_io import read_csv_artifact, stage_output_dir, write_csv_artifact
+
+ROOT = prepare_analysis_environment(__file__, matplotlib_backend=None)
+DEFAULT_STAGE_DIR = stage_output_dir("01_pronoun_detection", root=ROOT)
 
 try:
     import requests
@@ -15,19 +20,17 @@ except ImportError:
     REQUESTS_AVAILABLE = False
     print("[INFO] requests package not installed")
 
-os.chdir(Path(__file__).resolve().parent.parent)
-
-INPUT_PATH = "outputs/00_filtering/ukrainian_filtered.csv"
-OUTPUT_DIR = "outputs/01_pronoun_detection"
+INPUT_PATH = ROOT / "outputs" / "00_filtering" / "ukrainian_filtered.csv"
+OUTPUT_DIR = DEFAULT_STAGE_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-df_uk = pd.read_csv(INPUT_PATH)
+df_uk = read_csv_artifact(INPUT_PATH)
 print(f"Loaded {len(df_uk)} pre-filtered Ukrainian poems")
 
 detailed_path = os.path.join(OUTPUT_DIR, "ukrainian_pronouns_detailed.csv")
 if os.path.exists(detailed_path):
     try:
-        df_detailed = pd.read_csv(detailed_path)
+        df_detailed = read_csv_artifact(detailed_path)
         if 'Theme' in df_detailed.columns:
             theme_map = df_detailed.groupby('ID')['Theme'].first().to_dict()
             df_uk['Theme'] = df_uk['ID'].map(theme_map)
@@ -487,8 +490,8 @@ if 'is_dropped' in df_expanded.columns:
     dropped_count = df_expanded['is_dropped'].sum()
     print(f"\n[Dropped Subjects] Found {dropped_count} dropped subjects out of {len(df_expanded)} total pronoun instances")
 
-detailed_csv = os.path.join(OUTPUT_DIR, "ukrainian_pronouns_detailed.csv")
-df_expanded.to_csv(detailed_csv, index=False, encoding="utf-8")
+detailed_csv = OUTPUT_DIR / "ukrainian_pronouns_detailed.csv"
+write_csv_artifact(df_expanded, detailed_csv, index=False, encoding="utf-8")
 print(f"[INFO] Saved detailed results to {detailed_csv}")
 
 summary = (
@@ -497,8 +500,8 @@ summary = (
     .reset_index(name="count")
     .sort_values("count", ascending=False)
 )
-summary_csv = os.path.join(OUTPUT_DIR, "ukrainian_pronouns_summary.csv")
-summary.to_csv(summary_csv, index=False, encoding="utf-8")
+summary_csv = OUTPUT_DIR / "ukrainian_pronouns_summary.csv"
+write_csv_artifact(summary, summary_csv, index=False, encoding="utf-8")
 print(f"[INFO] Saved summary results to {summary_csv}")
 
 summary_matrix = df_expanded.groupby(["person", "number"]).size().unstack(fill_value=0)
@@ -509,7 +512,7 @@ plt.title("Distribution of Pronouns by Person and Number")
 plt.xlabel("Person")
 plt.ylabel("Frequency")
 plt.tight_layout()
-plot_path = os.path.join(OUTPUT_DIR, "pronoun_person_number.png")
+plot_path = OUTPUT_DIR / "pronoun_person_number.png"
 plt.savefig(plot_path, dpi=300)
 plt.show()
 

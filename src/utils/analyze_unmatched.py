@@ -1,10 +1,11 @@
 """Debug unmatched rows between manual merge and GPT detailed."""
 import os
-from pathlib import Path
+
+import repo_bootstrap
+
+repo_bootstrap.prepare_repo(__file__)
 
 import pandas as pd
-
-os.chdir(Path(__file__).resolve().parent.parent.parent)
 
 
 def norm(s):

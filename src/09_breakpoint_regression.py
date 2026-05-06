@@ -4,7 +4,9 @@ import os
 import sys
 from pathlib import Path
 
-os.chdir(Path(__file__).resolve().parent.parent)
+from utils.workspace import prepare_analysis_environment
+
+prepare_analysis_environment(__file__, matplotlib_backend=None)
 
 import numpy as np
 import pandas as pd
@@ -24,10 +26,7 @@ try:
 except ImportError:
     RUPTURES_AVAIL = False
 
-from importlib.util import spec_from_file_location, module_from_spec
-_08a = spec_from_file_location("adaptive", Path(__file__).parent / "08_adaptive_binning.py")
-_mod_08a = module_from_spec(_08a)
-_08a.loader.exec_module(_mod_08a)
+from utils.adaptive_temporal_binning import adaptive_binning
 
 OUTPUT_DIR = Path("outputs/09_breakpoint_regression")
 BREAK_2014 = pd.Timestamp("2014-02-01")
@@ -50,7 +49,7 @@ def load_and_prepare_data(min_poems: int = 30) -> tuple:
     df = df[df["person"].isin(["1", "2", "3"])]
     df["number"] = df["number"].astype(str).str.strip().replace("", np.nan)
 
-    df_with_int, interval_df = _mod_08a.adaptive_binning(df, min_poems=min_poems)
+    df_with_int, interval_df = adaptive_binning(df, min_poems=min_poems)
 
     def _agg(g):
         n = len(g)

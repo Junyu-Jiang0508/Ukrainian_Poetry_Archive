@@ -1,11 +1,15 @@
-import os
 import pandas as pd
 import re
-from pathlib import Path
 
-os.chdir(Path(__file__).resolve().parent.parent)
+from utils.workspace import prepare_analysis_environment
+from utils.stage_io import read_csv_artifact, stage_output_dir, write_csv_artifact
 
-df = pd.read_csv("outputs/01_pronoun_detection/ukrainian_pronouns_detailed.csv", encoding="utf-8")
+ROOT = prepare_analysis_environment(__file__, matplotlib_backend=None)
+DEFAULT_STAGE_DIR = stage_output_dir("01_pronoun_detection", root=ROOT)
+DEFAULT_INPUT_PATH = DEFAULT_STAGE_DIR / "ukrainian_pronouns_detailed.csv"
+DEFAULT_OUTPUT_PATH = DEFAULT_STAGE_DIR / "ukrainian_pronouns_annotated_50.csv"
+
+df = read_csv_artifact(DEFAULT_INPUT_PATH, encoding="utf-8")
 
 df_pronouns = df[df["pronoun"].notna()].copy()
 
@@ -176,8 +180,7 @@ annotations = df_50.apply(annotate_pronoun, axis=1)
 for col in annotations.columns:
     df_50[col] = annotations[col]
 
-output_path = "outputs/01_pronoun_detection/ukrainian_pronouns_annotated_50.csv"
-df_50.to_csv(output_path, index=False, encoding="utf-8")
+write_csv_artifact(df_50, DEFAULT_OUTPUT_PATH, index=False, encoding="utf-8")
 
-print(f"saved {output_path} rows={len(df_50)}")
+print(f"saved {DEFAULT_OUTPUT_PATH} rows={len(df_50)}")
 

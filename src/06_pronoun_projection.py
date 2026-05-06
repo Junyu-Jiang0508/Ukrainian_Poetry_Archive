@@ -6,17 +6,15 @@ from simalign import SentenceAligner
 import logging
 from tqdm import tqdm
 import re
-import os
-from pathlib import Path
 
-os.chdir(Path(__file__).resolve().parent.parent)
+from utils.workspace import prepare_analysis_environment
+from utils.stage_io import read_csv_artifact, stage_output_dir, write_csv_artifact
 
-INPUT_FILE = "outputs/01_pronoun_detection/ukrainian_pronouns_detailed.csv"
-OUTPUT_DIR = "outputs/01_pronoun_detection"
-OUTPUT_FILE = os.path.join(
-    OUTPUT_DIR,
-    "ukrainian_pronouns_projection_final.csv",
-)
+ROOT = prepare_analysis_environment(__file__, matplotlib_backend=None)
+DEFAULT_STAGE_DIR = stage_output_dir("01_pronoun_detection", root=ROOT)
+
+INPUT_FILE = DEFAULT_STAGE_DIR / "ukrainian_pronouns_detailed.csv"
+OUTPUT_FILE = DEFAULT_STAGE_DIR / "ukrainian_pronouns_projection_final.csv"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -196,12 +194,12 @@ class PronounProjectionPipeline:
 
 
 def main():
-    if not os.path.exists(INPUT_FILE):
+    if not INPUT_FILE.exists():
         print(f"Error: Input file not found at {INPUT_FILE}")
         return
 
     print(f"Loading data from {INPUT_FILE}...")
-    df_raw = pd.read_csv(INPUT_FILE)
+    df_raw = read_csv_artifact(INPUT_FILE)
 
     print("Deduplicating poems...")
     metadata_cols = ['ID', 'text', 'author', 'date', 'Theme', 'Language']
@@ -260,7 +258,7 @@ def main():
     final_cols = [c for c in desired_order if c in df_final.columns]
     df_final = df_final[final_cols]
 
-    df_final.to_csv(OUTPUT_FILE, index=False, encoding='utf-8')
+    write_csv_artifact(df_final, OUTPUT_FILE, index=False, encoding="utf-8")
     print("\nProcessing complete.")
     print(f"Total pronouns detected: {len(df_final)}")
     print(f"Explicit: {len(df_final[~df_final['is_dropped']])}")

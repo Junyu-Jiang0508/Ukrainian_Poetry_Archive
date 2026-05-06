@@ -1,140 +1,235 @@
-"""Filter corpus to authors marked Yes in data/raw/author.xlsx \"Include in public list\". Writes under data/processed/."""
+"""Build the public-list corpus subset of ukrpoetry_database.csv.
+
+Author allow-list from data/raw/author.xlsx (\"Include in public list\" = yes).
+By default keeps all ``Language`` values for those authors, but **drops rows where
+``Original language (if post is a translation)`` is non-empty**, so Ukrainian
+renderings of foreign originals are not double-counted alongside the same poem
+entered as non-translation. Use --include-translation-posts to keep those rows.
+
+Optional --ukrainian-only additionally requires Language=ukrainian.
+
+Writes data/processed/ukrpoetry_database_public_list.csv and, unless --corpus-only,
+filters downstream annotation CSVs to the same poem IDs / authors.
+"""
 from __future__ import annotations
 
-import os
+import argparse
 import sys
+from pathlib import Path
 
 import pandas as pd
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_RAW = os.path.join(ROOT, "data", "raw")
-DATA_PROCESSED = os.path.join(ROOT, "data", "processed")
-AUTHOR_XLSX = os.path.join(DATA_RAW, "author.xlsx")
-DATABASE_CSV = os.path.join(DATA_RAW, "ukrpoetry_database.csv")
-PRONOUN_DETAILED = os.path.join(ROOT, "outputs", "01_pronoun_detection", "ukrainian_pronouns_detailed.csv")
-PRONOUN_PROJECTION = os.path.join(ROOT, "outputs", "01_pronoun_detection", "ukrainian_pronouns_projection_final.csv")
-GPT_DETAILED = os.path.join(ROOT, "outputs", "01_pronoun_detection", "gpt_annotation_detailed.csv")
+from utils.public_list_filters import (
+    has_translation_marker,
+    load_allowed_author_names,
+    normalize_author_name,
+)
+from utils.workspace import repository_root
 
-ALIAS_COLS = [
-    "Author",
-    "Facebook name",
-    "Alias (English transliteration)",
-    "Alias (Russian)",
-    "Alias (Ukrainian)",
-]
+_ROOT = repository_root()
+_DATA_RAW = _ROOT / "data" / "raw"
+_DATA_PROCESSED = _ROOT / "data" / "processed"
 
+DEFAULT_AUTHOR_XLSX = _DATA_RAW / "author.xlsx"
+DEFAULT_DATABASE_CSV = _DATA_RAW / "ukrpoetry_database.csv"
+DEFAULT_CORPUS_OUT = _DATA_PROCESSED / "ukrpoetry_database_public_list.csv"
 
-def _norm_name(s: str) -> str:
-    return " ".join(str(s).strip().split())
+PRONOUN_DETAILED = _ROOT / "outputs" / "01_pronoun_detection" / "ukrainian_pronouns_detailed.csv"
+PRONOUN_PROJECTION = _ROOT / "outputs" / "01_pronoun_detection" / "ukrainian_pronouns_projection_final.csv"
+GPT_DETAILED = _ROOT / "outputs" / "01_pronoun_detection" / "gpt_annotation_detailed.csv"
 
-
-def _is_public_yes(value) -> bool:
-    if pd.isna(value):
-        return False
-    v = str(value).strip().lower()
-    return v in ("yes", "y", "1", "true")
+AUTHOR_OF_POEM_COL = "Author of poem"
+LANGUAGE_COL = "Language"
+ORIGINAL_LANGUAGE_COL = "Original language (if post is a translation)"
 
 
-def load_allowed_author_names(path: str) -> set[str]:
-    df = pd.read_excel(path)
-    pub = df[df["Include in public list"].map(_is_public_yes)]
-    names: set[str] = set()
-    for col in ALIAS_COLS:
-        if col not in pub.columns:
-            continue
-        for v in pub[col].dropna().astype(str):
-            t = _norm_name(v)
-            if t and t.lower() != "nan":
-                names.add(t)
-    return names
+def filter_database_to_public_corpus(
+    df: pd.DataFrame,
+    allowed_authors: set[str],
+    *,
+    ukrainian_only: bool = False,
+    exclude_translation_posts: bool = True,
+) -> pd.DataFrame:
+    """Return rows whose author is in ``allowed_authors``.
 
-
-def filter_database_csv(path: str, allowed: set[str]) -> tuple[pd.DataFrame, pd.Series]:
-    df = pd.read_csv(path, low_memory=False)
+    When ``exclude_translation_posts`` is True, drop rows with a non-empty
+    ``Original language (if post is a translation)`` (translation duplicates).
+    """
+    df = df.copy()
     df.columns = df.columns.str.strip()
-    lang_ok = df["Language"].fillna("").astype(str).str.strip().str.lower() == "ukrainian"
-    author_col = df["Author of poem"].fillna("").astype(str).map(_norm_name)
-    keep = lang_ok & author_col.isin(allowed)
-    return df.loc[keep].copy(), keep
+    if AUTHOR_OF_POEM_COL not in df.columns:
+        raise KeyError(
+            f"database missing {AUTHOR_OF_POEM_COL!r} (have {list(df.columns)})"
+        )
+    author_col = df[AUTHOR_OF_POEM_COL].fillna("").astype(str).map(normalize_author_name)
+    keep = author_col.isin(allowed_authors)
+    if exclude_translation_posts:
+        if ORIGINAL_LANGUAGE_COL not in df.columns:
+            print(
+                f"warning: missing {ORIGINAL_LANGUAGE_COL!r}; "
+                "not excluding translation posts",
+                file=sys.stderr,
+            )
+        else:
+            not_translation = ~df[ORIGINAL_LANGUAGE_COL].map(has_translation_marker)
+            keep = keep & not_translation
+    if ukrainian_only:
+        if LANGUAGE_COL not in df.columns:
+            raise KeyError(
+                f"ukrainian_only=True but missing {LANGUAGE_COL!r} "
+                f"(have {list(df.columns)})"
+            )
+        lang_ok = (
+            df[LANGUAGE_COL].fillna("").astype(str).str.strip().str.lower() == "ukrainian"
+        )
+        keep = keep & lang_ok
+    return df.loc[keep].copy()
 
 
-def filter_csv_by_ids(path: str, id_set: set[str], out_path: str, id_column: str = "ID") -> int | None:
-    if not os.path.isfile(path):
+def _filter_csv_by_ids(
+    src: Path,
+    id_set: set[str],
+    dest: Path,
+    *,
+    id_column: str = "ID",
+) -> int | None:
+    if not src.is_file():
         return None
-    df = pd.read_csv(path, low_memory=False)
-    if id_column not in df.columns:
-        print(f"skip no column {id_column}: {path}")
+    sub = pd.read_csv(src, low_memory=False)
+    if id_column not in sub.columns:
+        print(f"skip (no {id_column!r}): {src}", file=sys.stderr)
         return None
-    sub = df[df[id_column].astype(str).isin(id_set)].copy()
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    sub.to_csv(out_path, index=False, encoding="utf-8-sig")
+    sub = sub[sub[id_column].astype(str).isin(id_set)].copy()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    sub.to_csv(dest, index=False, encoding="utf-8-sig")
     return len(sub)
 
 
-def filter_csv_by_author(path: str, allowed: set[str], out_path: str, author_column: str = "author") -> int | None:
-    if not os.path.isfile(path):
+def _filter_csv_by_author(
+    src: Path,
+    allowed: set[str],
+    dest: Path,
+    *,
+    author_column: str = "author",
+) -> int | None:
+    if not src.is_file():
         return None
-    df = pd.read_csv(path, low_memory=False)
-    if author_column not in df.columns:
-        print(f"skip no column {author_column}: {path}")
+    sub = pd.read_csv(src, low_memory=False)
+    if author_column not in sub.columns:
+        print(f"skip (no {author_column!r}): {src}", file=sys.stderr)
         return None
-    auth = df[author_column].fillna("").astype(str).map(_norm_name)
-    sub = df[auth.isin(allowed)].copy()
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    sub.to_csv(out_path, index=False, encoding="utf-8-sig")
+    auth = sub[author_column].fillna("").astype(str).map(normalize_author_name)
+    sub = sub[auth.isin(allowed)].copy()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    sub.to_csv(dest, index=False, encoding="utf-8-sig")
     return len(sub)
 
 
-def main() -> None:
-    if not os.path.isfile(AUTHOR_XLSX):
-        print(f"missing: {AUTHOR_XLSX}")
-        sys.exit(1)
-    if not os.path.isfile(DATABASE_CSV):
-        print(f"missing: {DATABASE_CSV}")
-        sys.exit(1)
+def write_derivative_public_lists(id_set: set[str], allowed_authors: set[str]) -> None:
+    """Sync pronoun / GPT exports under data/processed/ when source files exist."""
+    pairs: list[tuple[Path, Path, str]] = [
+        (PRONOUN_DETAILED, _DATA_PROCESSED / "ukrainian_pronouns_detailed_public_list.csv", "ids"),
+        (
+            PRONOUN_PROJECTION,
+            _DATA_PROCESSED / "ukrainian_pronouns_projection_final_public_list.csv",
+            "ids",
+        ),
+    ]
+    for src, dest, mode in pairs:
+        if mode == "ids":
+            n = _filter_csv_by_ids(src, id_set, dest)
+            if n is not None:
+                print(f"wrote {dest.name} rows={n}")
+            else:
+                print(f"skip missing: {src}")
 
-    allowed = load_allowed_author_names(AUTHOR_XLSX)
-    print(f"allowed author keys: {len(allowed)}")
+    gpt_dest = _DATA_PROCESSED / "gpt_annotation_detailed_public_list.csv"
+    n = _filter_csv_by_author(GPT_DETAILED, allowed_authors, gpt_dest)
+    if n is not None:
+        print(f"wrote {gpt_dest.name} rows={n}")
+    else:
+        print(f"skip missing: {GPT_DETAILED}")
 
-    df_pub, _ = filter_database_csv(DATABASE_CSV, allowed)
-    os.makedirs(DATA_PROCESSED, exist_ok=True)
-    out_db = os.path.join(DATA_PROCESSED, "ukrpoetry_database_public_list.csv")
-    df_pub.to_csv(out_db, index=False, encoding="utf-8-sig")
-    print(f"wrote {out_db} rows={len(df_pub)}")
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(
+        description="Build public-list corpus from ukrpoetry_database.csv + author.xlsx."
+    )
+    p.add_argument(
+        "--author-xlsx",
+        type=Path,
+        default=DEFAULT_AUTHOR_XLSX,
+        help=f"Author metadata (default: {DEFAULT_AUTHOR_XLSX})",
+    )
+    p.add_argument(
+        "--database",
+        type=Path,
+        default=DEFAULT_DATABASE_CSV,
+        help=f"Full database CSV (default: {DEFAULT_DATABASE_CSV})",
+    )
+    p.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_CORPUS_OUT,
+        help=f"Filtered corpus CSV (default: {DEFAULT_CORPUS_OUT})",
+    )
+    p.add_argument(
+        "--ukrainian-only",
+        action="store_true",
+        help="Also require Language=ukrainian (default: no Language column filter).",
+    )
+    p.add_argument(
+        "--include-translation-posts",
+        action="store_true",
+        help=(
+            "Keep rows with non-empty Original language (if post is a translation); "
+            "default is to drop them to avoid duplicate originals vs translations."
+        ),
+    )
+    p.add_argument(
+        "--corpus-only",
+        action="store_true",
+        help="Only write the main corpus CSV; skip pronoun/GPT derivative exports.",
+    )
+    args = p.parse_args(argv)
+
+    author_xlsx = args.author_xlsx.resolve()
+    database_csv = args.database.resolve()
+    out_csv = args.output.resolve()
+
+    if not author_xlsx.is_file():
+        print(f"missing: {author_xlsx}", file=sys.stderr)
+        return 1
+    if not database_csv.is_file():
+        print(f"missing: {database_csv}", file=sys.stderr)
+        return 1
+
+    allowed = load_allowed_author_names(author_xlsx)
+    print(f"allowed author name keys: {len(allowed)}")
+
+    df_full = pd.read_csv(database_csv, low_memory=False)
+    df_pub = filter_database_to_public_corpus(
+        df_full,
+        allowed,
+        ukrainian_only=args.ukrainian_only,
+        exclude_translation_posts=not args.include_translation_posts,
+    )
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    df_pub.to_csv(out_csv, index=False, encoding="utf-8-sig")
+    print(f"wrote {out_csv} rows={len(df_pub)}")
+
+    if "ID" not in df_pub.columns:
+        print("warning: corpus has no ID column; skipping derivatives", file=sys.stderr)
+        return 0
 
     id_set = set(df_pub["ID"].astype(str))
-    print(f"poem ids: {len(id_set)}")
+    print(f"distinct poem IDs: {len(id_set)}")
 
-    n = filter_csv_by_ids(
-        PRONOUN_DETAILED,
-        id_set,
-        os.path.join(DATA_PROCESSED, "ukrainian_pronouns_detailed_public_list.csv"),
-    )
-    if n is not None:
-        print(f"wrote ukrainian_pronouns_detailed_public_list.csv n={n}")
-    else:
-        print("skip: ukrainian_pronouns_detailed.csv missing")
+    if not args.corpus_only:
+        write_derivative_public_lists(id_set, allowed)
 
-    n = filter_csv_by_ids(
-        PRONOUN_PROJECTION,
-        id_set,
-        os.path.join(DATA_PROCESSED, "ukrainian_pronouns_projection_final_public_list.csv"),
-    )
-    if n is not None:
-        print(f"wrote ukrainian_pronouns_projection_final_public_list.csv n={n}")
-    else:
-        print("skip: ukrainian_pronouns_projection_final.csv missing")
-
-    n = filter_csv_by_author(
-        GPT_DETAILED,
-        allowed,
-        os.path.join(DATA_PROCESSED, "gpt_annotation_detailed_public_list.csv"),
-    )
-    if n is not None:
-        print(f"wrote gpt_annotation_detailed_public_list.csv n={n}")
-    else:
-        print("skip: gpt_annotation_detailed.csv missing")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

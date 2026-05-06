@@ -2,11 +2,12 @@ import json
 import io
 import os
 import sys
-from pathlib import Path
+
+import repo_bootstrap
+
+repo_bootstrap.prepare_repo(__file__)
 
 import pandas as pd
-
-os.chdir(Path(__file__).resolve().parent.parent.parent)
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 

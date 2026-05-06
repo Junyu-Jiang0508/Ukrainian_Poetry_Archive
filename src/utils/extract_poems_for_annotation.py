@@ -1,11 +1,12 @@
 """Sample poems by year (<2022 / >=2022), split into sentences for manual CSV."""
 import os
 import re
-from pathlib import Path
+
+import repo_bootstrap
+
+repo_bootstrap.prepare_repo(__file__)
 
 import pandas as pd
-
-os.chdir(Path(__file__).resolve().parent.parent.parent)
 
 INPUT_FILE = "outputs/01_pronoun_detection/ukrainian_pronouns_projection_final.csv"
 OUTPUT_FILE = "outputs/01_pronoun_detection/poems_for_manual_annotation.csv"

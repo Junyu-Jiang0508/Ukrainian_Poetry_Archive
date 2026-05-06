@@ -1,84 +1,24 @@
 """Adaptive time bins for pronoun time series (min poems per bin). Run: python 08a_adaptive_binning.py [min_poems] [--smart]."""
 
-import os
+from pathlib import Path
+
+from utils.workspace import prepare_analysis_environment
+
+prepare_analysis_environment(__file__, matplotlib_backend=None)
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from pathlib import Path
 
-os.chdir(Path(__file__).resolve().parent.parent)
+from utils.adaptive_temporal_binning import (  # noqa: E402
+    INITIAL_MONTHS,
+    MIN_POEMS_PER_INTERVAL,
+    TARGET_POEMS,
+    adaptive_binning,
+)
 
 INPUT_CSV = Path("outputs/01_pronoun_detection/ukrainian_pronouns_projection_final.csv")
 OUTPUT_DIR = Path("outputs/08_change_point_detection")
-MIN_POEMS_PER_INTERVAL = 30
-INITIAL_MONTHS = 2
-TARGET_POEMS = 50
-
-
-def adaptive_binning(
-    df: pd.DataFrame,
-    date_col: str = "date",
-    id_col: str = "ID",
-    min_poems: int = None,
-    initial_months: int = None,
-) -> tuple:
-    min_poems = min_poems or MIN_POEMS_PER_INTERVAL
-    initial_months = initial_months or INITIAL_MONTHS
-
-    df = df.copy()
-    df["_date"] = pd.to_datetime(df[date_col], errors="coerce")
-    df = df.dropna(subset=["_date"])
-    df["_period"] = df["_date"].dt.to_period(f"{initial_months}M")
-
-    poem_counts = (
-        df.groupby("_period")
-        .agg(
-            n_poems=(id_col, "nunique"),
-            start_date=("_date", "min"),
-            end_date=("_date", "max"),
-        )
-        .reset_index()
-        .sort_values("_period")
-    )
-
-    intervals = poem_counts.to_dict("records")
-    i = 0
-    while i < len(intervals):
-        if intervals[i]["n_poems"] < min_poems and len(intervals) > 1:
-            if i < len(intervals) - 1:
-                intervals[i]["end_date"] = intervals[i + 1]["end_date"]
-                intervals[i]["n_poems"] += intervals[i + 1]["n_poems"]
-                intervals.pop(i + 1)
-            elif i > 0:
-                intervals[i - 1]["end_date"] = intervals[i]["end_date"]
-                intervals[i - 1]["n_poems"] += intervals[i]["n_poems"]
-                intervals.pop(i)
-                i -= 1
-        else:
-            i += 1
-
-    interval_df = pd.DataFrame(intervals)
-    interval_df["interval_id"] = range(1, len(interval_df) + 1)
-    interval_df["interval_label"] = interval_df.apply(
-        lambda r: f"{r['start_date'].strftime('%Y-%m')} to {r['end_date'].strftime('%Y-%m')}",
-        axis=1,
-    )
-
-    def _assign_interval(row):
-        for _, r in interval_df.iterrows():
-            if r["start_date"] <= row["_date"] <= r["end_date"]:
-                return r["interval_id"]
-        return np.nan
-
-    df["interval_id"] = df.apply(_assign_interval, axis=1)
-    df = df.dropna(subset=["interval_id"])
-    df["interval_id"] = df["interval_id"].astype(int)
-
-    return df.merge(
-        interval_df[["interval_id", "interval_label", "n_poems", "start_date", "end_date"]],
-        on="interval_id",
-    ), interval_df
 
 
 def smart_merge_intervals(

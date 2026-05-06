@@ -1,39 +1,37 @@
-"""Batch GPT annotation: pronouns per sentence + poem-level perspective."""
+"""Batch GPT annotation: pronoun identification per stanza (async, chunked)."""
 
 import argparse
+import asyncio
 import csv
 import json
 import os
 import re
-import time
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Literal, Optional
 
 import pandas as pd
-from openai import OpenAI, RateLimitError, APIStatusError, APITimeoutError
+from openai import AsyncOpenAI, RateLimitError, APIStatusError, APITimeoutError
 from pydantic import BaseModel, Field
-from tqdm import tqdm
+from tqdm.asyncio import tqdm as atqdm
 from dotenv import load_dotenv
 
-_ROOT = Path(__file__).resolve().parent.parent
+from utils.workspace import filtering_processed_dir, repository_root_for_script
 
-MANUAL_ANNOTATION_FILES = [
-    _ROOT / "data" / "manual_annotation_result_Junyu.csv",
-    _ROOT / "data" / "manual_annotation_result_junyu1.csv",
-]
+_ROOT = repository_root_for_script(__file__)
+_FILTERING_DIR = filtering_processed_dir(_ROOT)
 
-PUBLIC_PRONOUN_DETAILED = (
-    _ROOT / "data" / "processed" / "ukrainian_pronouns_detailed_public_list.csv"
-)
+# ── input paths ──────────────────────────────────────────────────────────────
+LAYER0_CSV = _FILTERING_DIR / "layer0_poems_one_per_row.csv"
+LAYER1_CSV = _FILTERING_DIR / "layer1_stanzas_one_per_row.csv"
 
-_DEFAULT_OUTPUT_DIR = _ROOT / "outputs" / "01_pronouns_detection"
-_PUBLIC_RUN_OUTPUT_DIR = _ROOT / "data" / "processed" / "gpt_annotation_public_run"
+# ── output paths ─────────────────────────────────────────────────────────────
+_DEFAULT_OUTPUT_DIR = _ROOT / "data" / "Annotated_GPT"
 
 OUTPUT_DIR = _DEFAULT_OUTPUT_DIR
-OUTPUT_CSV = OUTPUT_DIR / "gpt_annotation_detailed.csv"
-OUTPUT_JSONL = OUTPUT_DIR / "gpt_annotation_raw.jsonl"
+OUTPUT_CSV = OUTPUT_DIR / "pronoun_annotation.csv"
+OUTPUT_JSONL = OUTPUT_DIR / "pronoun_annotation_raw.jsonl"
 CHECKPOINT_FILE = OUTPUT_DIR / "checkpoint_done_ids.txt"
 COST_REPORT_FILE = OUTPUT_DIR / "token_usage_report.txt"
 
@@ -41,23 +39,25 @@ COST_REPORT_FILE = OUTPUT_DIR / "token_usage_report.txt"
 def configure_output_dir(output_dir: Path) -> None:
     global OUTPUT_DIR, OUTPUT_CSV, OUTPUT_JSONL, CHECKPOINT_FILE, COST_REPORT_FILE
     OUTPUT_DIR = output_dir
-    OUTPUT_CSV = OUTPUT_DIR / "gpt_annotation_detailed.csv"
-    OUTPUT_JSONL = OUTPUT_DIR / "gpt_annotation_raw.jsonl"
+    OUTPUT_CSV = OUTPUT_DIR / "pronoun_annotation.csv"
+    OUTPUT_JSONL = OUTPUT_DIR / "pronoun_annotation_raw.jsonl"
     CHECKPOINT_FILE = OUTPUT_DIR / "checkpoint_done_ids.txt"
     COST_REPORT_FILE = OUTPUT_DIR / "token_usage_report.txt"
 
 
 load_dotenv()
-API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=API_KEY)
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-MODEL_SENTENCE = "gpt-4o-mini"
-MODEL_PERSPECTIVE = "gpt-4o"
+MODEL = "gpt-4o-mini"
 
 PRICE = {
-    "gpt-4o":      {"input": 0.005,    "output": 0.015},
-    "gpt-4o-mini": {"input": 0.00015,  "output": 0.00060},
+    "gpt-4o-mini": {"input": 0.00015, "output": 0.00060},
 }
+
+# ── concurrency & chunking ───────────────────────────────────────────────────
+CONCURRENCY = 15
+MAX_LINES_PER_CHUNK = 30
+MAX_COMPLETION_TOKENS = 12000
 
 MAX_RETRIES = 5
 BACKOFF_BASE = 2.0
@@ -70,265 +70,160 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Pydantic schemas
+# ═══════════════════════════════════════════════════════════════════════════════
+
 class PronounAnalysis(BaseModel):
     english_pronoun: str = Field(
         ...,
         description=(
             "Exact personal pronoun token from your Shakespearean translation. "
-            "If the pronoun is pro-dropped in Ukrainian, render the INFERRED "
-            "English pronoun explicitly (e.g., 'I', 'we') — NEVER write '(pro-drop)' here. "
-            "ONLY personal pronouns: I me my mine myself / we us our ours ourselves / "
-            "thou thee thy thine thyself / ye you your yours yourself yourselves / "
-            "he him his himself / she her hers herself / it its itself / "
-            "they them their theirs themselves. "
-            "DO NOT include relative/demonstrative/indefinite pronouns: "
-            "that, which, who (relative), whom (relative), whose (relative), "
-            "none, what, whatever, whoever, whichever."
+            "If pro-dropped in source, render the INFERRED pronoun explicitly — "
+            "NEVER write '(pro-drop)'. "
+            "ONLY personal pronouns (I/me/my/mine/myself, we/us/our/ours/ourselves, "
+            "thou/thee/thy/thine/thyself, ye/you/your/yours/yourselves, "
+            "he/him/his/himself, she/her/hers/herself, it/its/itself, "
+            "they/them/their/theirs/themselves)."
         ),
     )
     person: Literal["1st", "2nd", "3rd", "Impersonal"] = Field(
         ...,
-        description=(
-            "Impersonal ONLY for Ukrainian impersonal verb constructions "
-            "(bezosovovi diyeslova) with no personal subject."
-        ),
+        description="Impersonal ONLY for Ukrainian impersonal verb constructions with no personal subject.",
     )
     number: Literal["Singular", "Plural", "None"] = Field(
         ...,
-        description="None only for genuinely impersonal constructions.",
+        description=(
+            "MORPHOLOGICAL number only. ви-forms are ALWAYS 'Plural' even if "
+            "polite address to one person. ти-forms are ALWAYS 'Singular'. "
+            "'None' only for genuinely impersonal constructions."
+        ),
+    )
+    vy_register: Literal[
+        "genuine_plural", "polite_singular", "ambiguous", "not_applicable"
+    ] = Field(
+        ...,
+        description=(
+            "ONLY for ви-forms (source is ви/вас/вам/вами/ваш*): "
+            "'genuine_plural' = addressing multiple people (nation, army, enemy collective, crowd); "
+            "'polite_singular' = formal address to one identified person; "
+            "'ambiguous' = cannot determine; "
+            "'not_applicable' = all non-ви pronouns (ти-forms, 1st/3rd person, etc.)."
+        ),
     )
     is_pro_drop: bool = Field(
         ...,
         description=(
-            "True if subject pronoun is absent in Ukrainian source "
-            "and inferred solely from verb morphology. "
+            "True if subject pronoun is absent in source and inferred from verb morphology. "
             "Possessives are NEVER pro-drop."
         ),
     )
     source_mapping: str = Field(
         ...,
         description=(
-            "Ukrainian pronoun as dictionary/lemma form aligned with the source line "
-            "(Cyrillic preferred; stay consistent). "
+            "Source pronoun as dictionary/lemma form (Cyrillic preferred). "
             "Append ' (IMPLIED)' if pro-drop. Append ' [RU]' if Russian source."
         ),
     )
 
 
-class SentenceAnalysis(BaseModel):
-    sentence_index: int = Field(
+class StanzaAnalysis(BaseModel):
+    stanza_index: int = Field(
         ...,
-        description="1-based index matching the input sentence numbering.",
+        description="1-based index matching the input stanza numbering.",
     )
     shakespearean_segment: str = Field(
         ...,
-        description="Shakespearean English translation of this sentence.",
+        description="Shakespearean English translation of this stanza.",
     )
     pronouns_found: List[PronounAnalysis] = Field(
         ...,
-        description=(
-            "All PERSONAL pronouns in this sentence. "
-            "Return an empty list if none are present."
-        ),
+        description="All PERSONAL pronouns in this stanza. Empty list if none.",
     )
 
 
-class PoemSentenceAnnotation(BaseModel):
-    sentences: List[SentenceAnalysis] = Field(
+class PoemStanzaAnnotation(BaseModel):
+    stanzas: List[StanzaAnalysis] = Field(
         ...,
-        description="One entry per input sentence, in the same order.",
+        description="One entry per input stanza, in the same order.",
     )
 
 
-PerspectiveType = Literal[
-    "1st person singular", "1st person plural",
-    "2nd person singular", "2nd person plural",
-    "3rd person singular", "3rd person plural",
-    "Impersonal/Other",
-]
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Prompt
+# ═══════════════════════════════════════════════════════════════════════════════
 
-WeInclusivity = Literal[
-    "inclusive", "exclusive", "ambiguous", "not_applicable",
-]
+STANZA_PROMPT = """\
+You are a Ukrainian linguistics specialist. You will receive numbered stanzas
+from a contemporary Ukrainian, Russian, or Crimean Tatar poem (Facebook, 2014-2025).
+Each stanza may contain multiple lines separated by newlines. For EACH stanza:
 
-ReferentCategory = Literal[
-    "SELF", "INTIMATE", "LOCAL", "NATION",
-    "SUPRANATIONAL", "OTHER", "UNCERTAIN",
-]
-
-AddresseeType = Literal[
-    "specific_individual", "collective_nation", "enemy_other",
-    "europe_world", "absent_beloved", "lyric_self_2nd",
-    "god_nature_abstract", "not_applicable",
-]
-
-PolyphonyType = Literal[
-    "monologic", "mediated_polyphony", "choral_polyphony",
-]
-
-
-class PoemPerspective(BaseModel):
-    poem_perspective_primary: PerspectiveType = Field(...)
-    poem_perspective_secondary: Optional[PerspectiveType] = Field(
-        default=None,
-        description=(
-            "Fill only if a second perspective occupies ≥30% of lines "
-            "and marks a deliberate shift. Never equal to primary. "
-            "Null otherwise."
-        ),
-    )
-    we_inclusivity: WeInclusivity = Field(...)
-    dominant_referent_category: ReferentCategory = Field(
-        ...,
-        description=(
-            "Social collective or person that the lyric speaker's 1st-person "
-            "pronouns (я, ми, нас, нам, …) primarily refer to. "
-            "Ignore 3rd-person referents (e.g. enemy as 'вони'); those are not this field."
-        ),
-    )
-    addressee_type: AddresseeType = Field(...)
-    polyphony_type: PolyphonyType = Field(...)
-
-
-SENTENCE_PROMPT = """\
-You are a Ukrainian linguistics specialist. You will receive a numbered list of sentences
-from a contemporary Ukrainian poem (Facebook, 2014-2025). For EACH sentence:
-
-STEP 1 — Translate to Shakespearean English (dost, hath, art, etc.).
-Preserve grammatical person/number. Render pro-drop subjects explicitly in translation.
+STEP 1 — Translate the entire stanza to Shakespearean English (dost, hath, art, etc.).
+Preserve grammatical person/number. Render pro-drop subjects explicitly.
 
 2nd-person mapping (STRICT — apply before translating):
   ти / тебе / тобі / твій / твоя / твоє / твої  →  thou / thee / thy / thine / thyself  (SINGULAR)
   ви / вас / вам / вами / ваш*                  →  ye / you / your / yours / yourselves  (PLURAL)
   Polite "ви" to one addressee still maps to ye/you/your — NEVER thou/thee/thy.
 
-STEP 2 — Identify ONLY PERSONAL PRONOUNS in your translation.
-
-NOT PRONOUNS — NEVER tag these:
-  Relative:      that  which  who  whom  whose  (when introducing a clause)
-  Demonstrative: this  these  those
-  Indefinite:    none  any  some  each  every  one  what  whatever  whoever
-
-For each personal pronoun, provide:
+STEP 2 — Identify ALL personal pronouns in your translation.
+For each, provide:
 - english_pronoun: exact token (lowercase)
 - person: "1st" | "2nd" | "3rd" | "Impersonal"
-  "Impersonal" = Ukrainian bezosovovo construction ONLY (no personal subject)
-- number: "Singular" | "Plural" | "None" (None = Impersonal only)
-- is_pro_drop: true if the Ukrainian subject pronoun is absent and inferred solely from verb morphology. Possessives are NEVER pro-drop.
-- source_mapping: Ukrainian dictionary/lemma form for the pronoun (Cyrillic preferred). Append " (IMPLIED)" if pro-drop. Append " [RU]" if Russian source.
+  "Impersonal" = Ukrainian bezosovovo construction ONLY
+- number: MORPHOLOGICAL form only. CRITICAL RULE:
+  ви-forms → ALWAYS "Plural" (even polite address to one person).
+  ти-forms → ALWAYS "Singular".
+  "None" → Impersonal only.
+  NEVER set "Singular" for a ви/вас/вам/ваш* source form.
+- vy_register: ONLY for ви-forms (source is ви/вас/вам/вами/ваш*):
+  "genuine_plural"  — addressing multiple people. Cues:
+      plural vocative ("друзі", "брати", "українці", "воїни");
+      enemy as collective ("ви прийшли на нашу землю", addressing army/Russia);
+      nation/community addressed as group;
+      imperative plural forms.
+  "polite_singular" — formal address to one identified person. Cues:
+      named individual; intimate/romantic singular addressee;
+      clearly one interlocutor in dialogue context.
+  "ambiguous" — cannot determine from context.
+  "not_applicable" — all non-ві pronouns (ти-forms, 1st/3rd person, etc.).
+  DEFAULT BIAS: in wartime poetry, ви addressing unnamed collective entities
+  (the enemy, the nation, soldiers) is genuine_plural, NOT polite_singular.
+- is_pro_drop: true if subject pronoun absent in source, inferred from verb morphology.
+  Possessives are NEVER pro-drop.
+- source_mapping: dictionary/lemma form (Cyrillic). Append " (IMPLIED)" if pro-drop.
+  Append " [RU]" if Russian source.
 
-Return JSON matching PoemSentenceAnnotation. No extra text.\
+Return JSON matching PoemStanzaAnnotation. No extra text.\
 """
 
-PERSPECTIVE_PROMPT = """\
-You are an expert in Ukrainian poetry, Critical Discourse Analysis, and wartime
-identity construction. Analyze the narrative perspective of an entire contemporary
-Ukrainian poem (2014-2025, sourced from Facebook).
 
-TASK 1 — poem_perspective_primary (ONE value only; "Mixed" is NOT valid):
-  "1st person singular"  "1st person plural"
-  "2nd person singular"  "2nd person plural"
-  "3rd person singular"  "3rd person plural"
-  "Impersonal/Other"
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Stanza chunking
+# ═══════════════════════════════════════════════════════════════════════════════
 
-DECISION RULE:
-  - Primary = the grammatical person of the LYRIC SPEAKER'S subject position
-    that dominates ≥50% of content lines.
-  - If no single perspective dominates by line count, choose the perspective
-    of the opening and closing stanzas (framing effect).
-  - You must commit to one value. "Mixed" is not an option.
+def _build_chunk_mapping(
+    stanza_texts: list[str],
+    stanza_indices: list[int],
+    max_lines: int = MAX_LINES_PER_CHUNK,
+) -> list[tuple[int, str]]:
+    """Returns list of (original_stanza_index, chunk_text) after splitting."""
+    mapping: list[tuple[int, str]] = []
+    for text, idx in zip(stanza_texts, stanza_indices):
+        lines = text.split("\n")
+        if len(lines) <= max_lines:
+            mapping.append((idx, text))
+        else:
+            for start in range(0, len(lines), max_lines):
+                chunk = "\n".join(lines[start: start + max_lines])
+                if chunk.strip():
+                    mapping.append((idx, chunk))
+    return mapping
 
-TASK 2 — poem_perspective_secondary (optional):
-  Same value set as Task 1, or null.
-  Fill ONLY if a second perspective occupies ≥30% of lines AND marks a
-  deliberate shift in lyric subject position (not brief pronoun alternation
-  within a stanza). Never equal to poem_perspective_primary.
 
-TASK 3 — we_inclusivity (evaluate only if 1st plural "ми/нас/нам" present):
-  Step 1: Identify the addressee — is there a "ти/ви", a vocative
-          ("друзі", "брати і сестри"), or an implied public audience?
-    - If no addressee is identifiable (no 2nd person, no vocative, no clear
-      implied audience), set we_inclusivity to "ambiguous" (handbook default
-      when inclusive/exclusive cannot be grounded). Skip Step 2.
-  Step 2: Only if Step 1 found an addressee: does "ми" invite that addressee into the group?
-    - Yes → "inclusive"
-      (cues: "ми всі", "разом з вами", calls to collective action,
-       "давайте", "згадаймо")
-    - No — "ми" is a subgroup contrasted with or separate from addressee
-      → "exclusive"
-      (cues: "ми стоїмо, а ви…", soldier vs civilian, "ми, поети")
-    - Cannot resolve / deliberately open → "ambiguous"
-  Step 3: No 1st plural at all → "not_applicable"
-
-TASK 4 — dominant_referent_category:
-  ONLY what the lyric speaker's 1st-person pronouns (я, ми, нас, нам, …)
-  refer to — not 3rd-person referents (e.g. "вони" = occupiers is OUT OF SCOPE).
-  STATE and ENEMY as referents of "ми/я" are extremely rare; do not use this field
-  to encode the poem's main enemy or the state unless they are clearly the
-  referent of the speaker's own 1st-person forms.
-
-  Categories:
-    "SELF"          – poet as individual person
-    "INTIMATE"      – family, partner, close friends
-                      (cues: "мама", "діти", "коханий/а", "ми з тобою")
-    "LOCAL"         – city, community, military unit
-                      (cues: place names + "ми", "наша рота", "наш батальйон")
-    "NATION"        – Ukrainians as national collective
-                      (cues: "українці", "народ", "ми – українці", "наша земля")
-    "SUPRANATIONAL" – Europe, world, humanity
-                      (cues: "Європа", "людство", "ми всі на цій планеті")
-    "OTHER"         – identifiable group not covered above
-                      ("ми, жінки"; "ми, біженці")
-    "UNCERTAIN"     – unresolvable after reading full poem
-
-  Decision procedure (1st-person referent only):
-    1. Explicit national markers ("українці", "народ", "нація") → NATION
-    2. Kinship/family terms → INTIMATE
-    3. Local spatial markers or unit language → LOCAL
-    4. Global/humanity frame → SUPRANATIONAL
-    5. Predominantly singular 1st-person (я/мене/мій) in personal or introspective
-       register with no collective reference → SELF
-    6. Identifiable group not covered above (occupational, gender, refugee, etc.)
-       → OTHER
-    7. Cannot determine → UNCERTAIN
-
-  Boundary rules:
-    - "наші діти" in personal narrative → INTIMATE;
-      in generational/national narrative → NATION
-    - City name + national framing ("ми, кияни, захищаємо Україну") → NATION
-    - City name only + no national markers → LOCAL
-
-TASK 5 — addressee_type (only if 2nd person present; else "not_applicable"):
-  "specific_individual"  – named or clearly identified single person
-  "collective_nation"    – Ukrainian people addressed as a whole
-  "enemy_other"          – occupiers, Russia addressed directly
-  "europe_world"         – Europe, international community
-  "absent_beloved"       – dead, missing, or separated intimate person
-  "lyric_self_2nd"       – speaker addresses themselves in 2nd person
-                           (apostrophe to self; "ти витримаєш, серце"
-                            where "ти" = speaker's own self)
-  "god_nature_abstract"  – divine, nature, abstract forces
-  "not_applicable"       – no 2nd person in poem
-
-  Decision rule: if multiple 2nd-person addressees exist, choose the one
-  that receives the dominant emotional/rhetorical weight (most lines, climactic
-  position, or strongest modal investment).
-  If a named/identified individual is deceased or absent → "absent_beloved"
-  takes priority over "specific_individual".
-
-TASK 6 — polyphony_type:
-  "monologic"          – single stable lyric voice throughout
-  "mediated_polyphony" – central narrator quotes or collects other voices
-                         (cues: reported speech, "вона сказала", "він писав")
-  "choral_polyphony"   – multiple voices with equal status, no dominant
-                         narrator mediating between them
-  Note: "choral_polyphony" is rare in short lyric poems; most Facebook
-  war poetry is "monologic". Use "choral_polyphony" only when there is
-  genuinely no identifiable central narrator.
-
-Return JSON matching PoemPerspective. No extra text.\
-"""
-
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Utilities
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def _normalize_pronoun(raw: str) -> str:
     if not raw:
@@ -342,7 +237,7 @@ def _get_temporal_period(year: Optional[int]) -> str:
     if year is None:
         return "unknown"
     if year < 2014:
-        return "unknown"
+        return "pre_2014"
     if year <= 2021:
         return "2014_2021"
     return "post_2022"
@@ -366,7 +261,8 @@ def _append_raw_jsonl(record: dict):
 
 
 _NULL_AS_EMPTY_FOR_CSV = frozenset({
-    "pronoun_word", "person", "number", "is_pro_drop", "source_mapping", "qa_flag",
+    "pronoun_word", "person", "number", "vy_register",
+    "is_pro_drop", "source_mapping", "qa_flag",
 })
 
 
@@ -388,16 +284,26 @@ def _append_rows_to_csv(rows: list, write_header: bool):
         writer.writerows(out_rows)
 
 
-def _calc_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    p = PRICE.get(model, PRICE["gpt-4o"])
+def _calc_cost(model: str, prompt_tokens: int, completion_tokens: int) -> Optional[float]:
+    p = PRICE.get(model)
+    if p is None:
+        return None
     return (prompt_tokens / 1000 * p["input"]
             + completion_tokens / 1000 * p["output"])
 
 
-def _call_with_retry(fn, *args, **kwargs):
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Async GPT call with retry
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_semaphore: asyncio.Semaphore | None = None
+
+
+async def _call_with_retry(fn, *args, **kwargs):
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            completion = fn(*args, **kwargs)
+            async with _semaphore:
+                completion = await fn(*args, **kwargs)
             usage = {
                 "prompt_tokens": completion.usage.prompt_tokens,
                 "completion_tokens": completion.usage.completion_tokens,
@@ -406,16 +312,16 @@ def _call_with_retry(fn, *args, **kwargs):
         except RateLimitError as e:
             wait = BACKOFF_BASE ** attempt
             log.warning("rate_limit %s/%s %.1fs %s", attempt, MAX_RETRIES, wait, e)
-            time.sleep(wait)
+            await asyncio.sleep(wait)
         except APITimeoutError as e:
             wait = BACKOFF_BASE ** attempt
             log.warning("timeout %s/%s %.1fs %s", attempt, MAX_RETRIES, wait, e)
-            time.sleep(wait)
+            await asyncio.sleep(wait)
         except APIStatusError as e:
             if e.status_code >= 500:
                 wait = BACKOFF_BASE ** attempt
                 log.warning("server %s %s/%s %.1fs", e.status_code, attempt, MAX_RETRIES, wait)
-                time.sleep(wait)
+                await asyncio.sleep(wait)
             else:
                 log.error("api %s %s", e.status_code, e)
                 return None, None
@@ -426,35 +332,39 @@ def _call_with_retry(fn, *args, **kwargs):
     return None, None
 
 
-def analyze_poem_sentences_with_gpt(
-    sentences: list[str],
+async def analyze_stanza_batch(
+    chunks: list[str],
     poem_id: str,
-) -> tuple[Optional[PoemSentenceAnnotation], Optional[dict]]:
-    if not sentences:
+) -> tuple[Optional[PoemStanzaAnnotation], Optional[dict]]:
+    """Send a batch of text chunks (<=MAX_LINES each) to GPT."""
+    if not chunks:
         return None, None
 
-    numbered = "\n".join(f"[{i + 1}] {s}" for i, s in enumerate(sentences))
+    numbered = "\n\n".join(
+        f"[{i + 1}]\n{s}" for i, s in enumerate(chunks)
+    )
 
-    def _call():
-        return client.beta.chat.completions.parse(
-            model=MODEL_SENTENCE,
+    async def _call():
+        return await client.beta.chat.completions.parse(
+            model=MODEL,
             messages=[
-                {"role": "system", "content": SENTENCE_PROMPT},
+                {"role": "system", "content": STANZA_PROMPT},
                 {
                     "role": "user",
                     "content": (
-                        "Analyze ALL sentences below. "
-                        "Return one SentenceAnalysis per sentence, "
-                        "preserving the sentence_index numbers.\n\n"
+                        "Analyze ALL stanzas below. "
+                        "Return one StanzaAnalysis per stanza, "
+                        "preserving the stanza_index numbers.\n\n"
                         + numbered
                     ),
                 },
             ],
-            response_format=PoemSentenceAnnotation,
+            response_format=PoemStanzaAnnotation,
+            max_completion_tokens=MAX_COMPLETION_TOKENS,
             temperature=0.1,
         )
 
-    completion, usage = _call_with_retry(_call)
+    completion, usage = await _call_with_retry(_call)
     if completion is None:
         return None, None
 
@@ -462,60 +372,24 @@ def analyze_poem_sentences_with_gpt(
     raw = completion.choices[0].message.model_dump(warnings=False)
 
     _append_raw_jsonl({
-        "type": "sentence_batch",
+        "type": "stanza_batch",
         "poem_id": str(poem_id),
-        "sentence_count": len(sentences),
+        "chunk_count": len(chunks),
         "raw_response": raw,
         "usage": usage,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
     if parsed is None:
-        log.error("poem_id=%s sentence parse None", poem_id)
+        log.error("poem_id=%s parse None (truncated?)", poem_id)
         return None, usage
 
     return parsed, usage
 
 
-def analyze_perspective_with_gpt(
-    full_poem_text: str,
-    poem_id: str,
-) -> tuple[Optional[PoemPerspective], Optional[dict]]:
-    def _call():
-        return client.beta.chat.completions.parse(
-            model=MODEL_PERSPECTIVE,
-            messages=[
-                {"role": "system", "content": PERSPECTIVE_PROMPT},
-                {
-                    "role": "user",
-                    "content": f"Analyze the perspective of this Ukrainian poem:\n\n{full_poem_text}",
-                },
-            ],
-            response_format=PoemPerspective,
-            temperature=0.1,
-        )
-
-    completion, usage = _call_with_retry(_call)
-    if completion is None:
-        return None, None
-
-    parsed = completion.choices[0].message.parsed
-    raw = completion.choices[0].message.model_dump(warnings=False)
-
-    _append_raw_jsonl({
-        "type": "perspective",
-        "poem_id": str(poem_id),
-        "raw_response": raw,
-        "usage": usage,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
-
-    if parsed is None:
-        log.error("poem_id=%s perspective parse None", poem_id)
-        return None, usage
-
-    return parsed, usage
-
+# ═══════════════════════════════════════════════════════════════════════════════
+#  QA validation
+# ═══════════════════════════════════════════════════════════════════════════════
 
 _UKR_TOKEN = re.compile(r"[а-яіїєґ']+", re.IGNORECASE)
 _THOU_FORMS = frozenset({"thou", "thee", "thy", "thine", "thyself"})
@@ -526,7 +400,7 @@ def _source_indicates_plural_vy(source: str) -> bool:
     for cut in (" (implied)", " [ru]"):
         if cut in s:
             s = s.split(cut)[0]
-    tokens = _UKR_TOKEN.findall(s.replace("'", "’"))
+    tokens = _UKR_TOKEN.findall(s.replace("\u2019", "'"))
     if {"ви", "вас", "вам", "вами"}.intersection(tokens):
         return True
     return any(t.startswith("ваш") for t in tokens)
@@ -557,6 +431,7 @@ def _validate_pronoun_row(row: dict) -> str:
         return "OK"
 
     person = row.get("person", "")
+    number = row.get("number", "")
     pronoun = _normalize_pronoun(str(raw_pronoun))
 
     if "pro" in pronoun and "drop" in pronoun:
@@ -566,11 +441,22 @@ def _validate_pronoun_row(row: dict) -> str:
         )
 
     source = str(row.get("source_mapping") or "")
-    if _source_indicates_plural_vy(source) and pronoun in _THOU_FORMS:
+    is_vy = _source_indicates_plural_vy(source)
+
+    if is_vy and pronoun in _THOU_FORMS:
         return (
             "INCONSISTENT: source is ви-form (plural) but english_pronoun is "
             "singular thou-form"
         )
+
+    if is_vy and number == "Singular":
+        return "INCONSISTENT: source is ви-form but number='Singular' (must be 'Plural')"
+
+    vy_reg = row.get("vy_register", "")
+    if is_vy and vy_reg == "not_applicable":
+        return "INCONSISTENT: source is ви-form but vy_register='not_applicable'"
+    if not is_vy and vy_reg in ("genuine_plural", "polite_singular", "ambiguous"):
+        return f"INCONSISTENT: source is not ви-form but vy_register='{vy_reg}'"
 
     valid_set = _VALID_PERSON_PRONOUN.get(person, set())
     if valid_set and pronoun not in valid_set:
@@ -585,6 +471,10 @@ def _validate_pronoun_row(row: dict) -> str:
     return "OK"
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Data loading
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def _year_from_date(val) -> Optional[int]:
     if val is None or pd.isna(val):
         return None
@@ -598,269 +488,254 @@ def _year_from_date(val) -> Optional[int]:
         return None
 
 
-def load_annotation_sentences(paths: list[Path]) -> pd.DataFrame:
-    dfs = []
-    for path in paths:
-        if path.exists():
-            dfs.append(pd.read_csv(path, low_memory=False))
-    if not dfs:
-        missing = ", ".join(str(p) for p in paths)
-        raise FileNotFoundError(f"Input file(s) not found: {missing}")
-    df = pd.concat(dfs, ignore_index=True)
-    for col in ("ID", "context", "author", "text"):
-        if col not in df.columns:
-            raise ValueError(
-                f"CSV missing required column {col!r} (have: {list(df.columns)})"
-            )
-    unique = df.drop_duplicates(subset=["ID", "context"]).copy()
-    unique = unique[
-        unique["context"].notna() & (unique["context"].astype(str).str.strip() != "")
+def load_data(
+    layer1_path: Path,
+    layer0_path: Path,
+) -> tuple[pd.DataFrame, dict]:
+    """Load stanza data and build poem-level metadata lookup."""
+    if not layer1_path.exists():
+        raise FileNotFoundError(f"Stanza file not found: {layer1_path}")
+    if not layer0_path.exists():
+        raise FileNotFoundError(f"Poem file not found: {layer0_path}")
+
+    stanzas = pd.read_csv(layer1_path, low_memory=False)
+    for col in ("poem_id", "stanza_index", "stanza_text", "author"):
+        if col not in stanzas.columns:
+            raise ValueError(f"layer1 CSV missing column {col!r}")
+    stanzas = stanzas[stanzas["stanza_text"].notna()].copy()
+
+    usecols = [
+        "poem_id", "Date posted", "Language",
+        "Poem full text (copy and paste)",
+        "Is repeat",
+        "I.D. of original (if poem is a translation)",
     ]
-    if "year" not in unique.columns and "date" in unique.columns:
-        unique = unique.copy()
-        unique["year"] = unique["date"].map(_year_from_date)
-    elif "year" not in unique.columns:
-        unique = unique.copy()
-        unique["year"] = None
-    return unique
+    poems = pd.read_csv(layer0_path, usecols=usecols, low_memory=False)
+    poems = poems.rename(columns={
+        "Date posted": "date",
+        "Language": "language",
+        "Poem full text (copy and paste)": "full_poem_text",
+        "Is repeat": "is_repeat_raw",
+        "I.D. of original (if poem is a translation)": "original_id",
+    })
+    poems["year"] = poems["date"].map(_year_from_date)
+    poems["temporal_period"] = poems["year"].map(_get_temporal_period)
+    poems["is_repeat"] = poems["is_repeat_raw"].str.lower().eq("yes").fillna(False)
+    poems["is_translation"] = poems["original_id"].notna()
+
+    poem_meta = {}
+    for _, row in poems.iterrows():
+        pid = str(row["poem_id"])
+        poem_meta[pid] = {
+            "year":            row["year"],
+            "temporal_period": row["temporal_period"],
+            "language":        row.get("language", ""),
+            "full_poem_text":  row.get("full_poem_text", ""),
+            "is_repeat":       bool(row["is_repeat"]),
+            "is_translation":  bool(row["is_translation"]),
+        }
+
+    return stanzas, poem_meta
 
 
-def main():
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Per-poem processing (async)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def process_poem(
+    pid_str: str,
+    grp: pd.DataFrame,
+    meta: dict,
+) -> tuple[str, list[dict], dict]:
+    """Annotate one poem. Returns (poem_id, csv_rows, usage_delta)."""
+    usage_delta = {"prompt": 0, "completion": 0}
+
+    stanza_texts: list[str] = []
+    stanza_indices: list[int] = []
+    for _, row in grp.iterrows():
+        txt = str(row["stanza_text"]).strip()
+        if not txt:
+            continue
+        stanza_texts.append(txt)
+        stanza_indices.append(int(row["stanza_index"]))
+
+    if not stanza_texts:
+        return pid_str, [], usage_delta
+
+    chunk_mapping = _build_chunk_mapping(stanza_texts, stanza_indices)
+    chunk_texts = [t for _, t in chunk_mapping]
+
+    analysis, usage = await analyze_stanza_batch(chunk_texts, pid_str)
+    if usage:
+        usage_delta["prompt"] += usage["prompt_tokens"]
+        usage_delta["completion"] += usage["completion_tokens"]
+
+    if not analysis:
+        log.warning("poem_id=%s batch failed", pid_str)
+        return pid_str, [], usage_delta
+
+    sa_by_batch_idx: dict[int, StanzaAnalysis] = {
+        sa.stanza_index: sa for sa in analysis.stanzas
+    }
+
+    poem_rows: list[dict] = []
+    shakespeare_segs: list[str] = []
+    author = grp.iloc[0]["author"] if "author" in grp.columns else ""
+
+    for batch_idx, (orig_idx, chunk_text) in enumerate(chunk_mapping, start=1):
+        sa = sa_by_batch_idx.get(batch_idx)
+        if sa is None:
+            log.warning(
+                "poem_id=%s missing batch_index=%d (stanza %d)",
+                pid_str,
+                batch_idx,
+                orig_idx,
+            )
+            continue
+
+        en_seg = sa.shakespearean_segment or ""
+        shakespeare_segs.append(en_seg)
+
+        base = {
+            "poem_id":          pid_str,
+            "author":           author,
+            "language":         meta.get("language", ""),
+            "year":             meta.get("year"),
+            "temporal_period":  meta.get("temporal_period", "unknown"),
+            "is_repeat":        meta.get("is_repeat", False),
+            "is_translation":   meta.get("is_translation", False),
+            "stanza_index":     orig_idx,
+            "stanza_ukr":       chunk_text,
+            "stanza_en":        en_seg,
+            "full_shakespeare_text": "",
+        }
+
+        if not sa.pronouns_found:
+            poem_rows.append({
+                **base,
+                "pronoun_word":   None,
+                "person":         None,
+                "number":         None,
+                "vy_register":    None,
+                "is_pro_drop":    None,
+                "source_mapping": None,
+                "qa_flag":        "OK",
+            })
+        else:
+            for pr in sa.pronouns_found:
+                row_dict = {
+                    **base,
+                    "pronoun_word":   _normalize_pronoun(pr.english_pronoun),
+                    "person":         pr.person,
+                    "number":         pr.number,
+                    "vy_register":    pr.vy_register,
+                    "is_pro_drop":    pr.is_pro_drop,
+                    "source_mapping": pr.source_mapping,
+                    "qa_flag":        "",
+                }
+                row_dict["qa_flag"] = _validate_pronoun_row(row_dict)
+                poem_rows.append(row_dict)
+
+    full_text = " // ".join(s for s in shakespeare_segs if s)
+    for r in poem_rows:
+        r["full_shakespeare_text"] = full_text
+
+    return pid_str, poem_rows, usage_delta
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Main
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def async_main():
+    global _semaphore, MODEL
+
     parser = argparse.ArgumentParser(
-        description="GPT pronoun + poem perspective annotation (manual or public list)."
+        description="GPT stanza-level pronoun annotation (async).",
     )
-    env_src = os.environ.get("GPT_ANNOTATION_SOURCE", "manual")
+    parser.add_argument("--layer1", type=Path, default=LAYER1_CSV)
+    parser.add_argument("--layer0", type=Path, default=LAYER0_CSV)
+    parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument(
-        "--source",
-        choices=("manual", "public"),
-        default=env_src if env_src in ("manual", "public") else "manual",
-        help=(
-            "manual: annotator CSVs; public: ukrainian_pronouns_detailed_public_list.csv. "
-            "Override with env GPT_ANNOTATION_SOURCE."
-        ),
+        "--model",
+        type=str,
+        default=MODEL,
+        help=f"OpenAI model id (default: {MODEL})",
     )
     parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=None,
-        help=(
-            "Output directory (default: manual→outputs/01_pronouns_detection, "
-            "public→data/processed/gpt_annotation_public_run)."
-        ),
+        "--concurrency", type=int, default=CONCURRENCY,
+        help=f"Max parallel API calls (default: {CONCURRENCY})",
     )
     args = parser.parse_args()
+    MODEL = args.model
 
     if args.output_dir is not None:
         configure_output_dir(args.output_dir.resolve())
-    elif args.source == "public":
-        configure_output_dir(_PUBLIC_RUN_OUTPUT_DIR)
-    else:
-        configure_output_dir(_DEFAULT_OUTPUT_DIR)
-
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    _semaphore = asyncio.Semaphore(args.concurrency)
 
     fh = logging.FileHandler(OUTPUT_DIR / "run.log", encoding="utf-8")
     fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     log.addHandler(fh)
 
-    if args.source == "public":
-        input_paths = [PUBLIC_PRONOUN_DETAILED]
-        log.info("source=public %s", PUBLIC_PRONOUN_DETAILED)
-    else:
-        input_paths = list(MANUAL_ANNOTATION_FILES)
-        log.info("source=manual %s", input_paths)
-    log.info("output_dir=%s", OUTPUT_DIR)
-
     try:
-        df_sentences = load_annotation_sentences(input_paths)
+        stanzas_df, poem_meta = load_data(args.layer1, args.layer0)
     except (FileNotFoundError, ValueError) as e:
         log.error(str(e))
         return
 
-    poems = df_sentences.drop_duplicates(subset=["ID"])[["ID", "author", "text"]].copy()
-
-    year_by_id: dict = {}
-    if "year" in df_sentences.columns:
-        year_by_id = (
-            df_sentences.drop_duplicates(subset=["ID"])
-            .set_index("ID")["year"]
-            .to_dict()
-        )
-
-    log.info("%d sentences, %d poems", len(df_sentences), len(poems))
+    grouped = {
+        pid: grp.sort_values("stanza_index")
+        for pid, grp in stanzas_df.groupby("poem_id", sort=False)
+    }
+    poem_ids = list(grouped.keys())
+    log.info("%d stanzas, %d poems", len(stanzas_df), len(poem_ids))
 
     done_ids = _load_checkpoint()
-    poems_to_run = poems[~poems["ID"].astype(str).isin(done_ids)]
-    log.info("checkpoint: %d done, %d to run", len(done_ids), len(poems_to_run))
+    todo = [pid for pid in poem_ids if str(pid) not in done_ids]
+    log.info("checkpoint: %d done, %d to run", len(done_ids), len(todo))
 
     need_header = not OUTPUT_CSV.exists()
+    usage_counter = {"prompt": 0, "completion": 0}
 
-    usage_counter: dict[str, dict[str, int]] = {
-        MODEL_SENTENCE: {"prompt": 0, "completion": 0},
-        MODEL_PERSPECTIVE: {"prompt": 0, "completion": 0},
+    tasks = {
+        asyncio.create_task(
+            process_poem(str(pid), grouped[pid], poem_meta.get(str(pid), {}))
+        ): pid
+        for pid in todo
     }
 
-    log.info("=== PHASE 1: perspective ===")
-    perspective_by_id: dict = {}
-    perspective_attempted_ids: set[str] = set()
+    done_count = 0
+    for coro in atqdm(asyncio.as_completed(tasks), total=len(tasks), desc="poems"):
+        pid_str, rows, usage_delta = await coro
+        usage_counter["prompt"] += usage_delta["prompt"]
+        usage_counter["completion"] += usage_delta["completion"]
 
-    for _, row in tqdm(poems_to_run.iterrows(), total=len(poems_to_run), desc="perspective"):
-        pid = str(row["ID"])
-        text = row.get("text", "")
-        if pd.isna(text) or not str(text).strip():
-            continue
-        perspective_attempted_ids.add(pid)
-        p, usage = analyze_perspective_with_gpt(str(text), pid)
-        if usage:
-            usage_counter[MODEL_PERSPECTIVE]["prompt"] += usage["prompt_tokens"]
-            usage_counter[MODEL_PERSPECTIVE]["completion"] += usage["completion_tokens"]
-        if p:
-            perspective_by_id[pid] = {
-                "primary":                    p.poem_perspective_primary or "",
-                "secondary":                  p.poem_perspective_secondary,
-                "we_inclusivity":             p.we_inclusivity or "",
-                "dominant_referent_category": p.dominant_referent_category or "",
-                "addressee_type":             p.addressee_type or "",
-                "polyphony_type":             p.polyphony_type or "",
-            }
+        if rows:
+            _append_rows_to_csv(rows, write_header=need_header)
+            need_header = False
+            log.info("poem_id=%s wrote %d rows", pid_str, len(rows))
 
-    log.info("=== PHASE 2: sentences ===")
-
-    for pid_str in tqdm(poems_to_run["ID"].astype(str).tolist(), desc="poems"):
-        pid_str = str(pid_str)
-        if (
-            pid_str in perspective_attempted_ids
-            and pid_str not in perspective_by_id
-        ):
-            log.warning("poem_id=%s no perspective, skip phase2 (no checkpoint)", pid_str)
-            continue
-
-        poem_sentences = df_sentences[df_sentences["ID"].astype(str) == pid_str]
-        pers = perspective_by_id.get(pid_str, {})
-
-        try:
-            raw_id = int(float(pid_str))
-        except (ValueError, TypeError):
-            raw_id = pid_str
-        raw_year = year_by_id.get(raw_id)
-        try:
-            year_int = int(raw_year) if raw_year and not pd.isna(raw_year) else None
-        except (ValueError, TypeError):
-            year_int = None
-        temporal_period = _get_temporal_period(year_int)
-
-        sentence_list: list[str] = []
-        sentence_meta: list[dict] = []
-        for _, row in poem_sentences.iterrows():
-            ctx = row["context"]
-            if pd.isna(ctx) or not str(ctx).strip():
-                continue
-            sentence_list.append(str(ctx).strip())
-            sentence_meta.append({
-                "author": row.get("author", ""),
-                "context_ukr": str(ctx).strip(),
-            })
-
-        if not sentence_list:
-            _save_checkpoint(pid_str)
-            continue
-
-        analysis, usage = analyze_poem_sentences_with_gpt(sentence_list, pid_str)
-        if usage:
-            usage_counter[MODEL_SENTENCE]["prompt"] += usage["prompt_tokens"]
-            usage_counter[MODEL_SENTENCE]["completion"] += usage["completion_tokens"]
-
-        if not analysis:
-            log.warning("poem_id=%s sentence batch failed", pid_str)
-            _save_checkpoint(pid_str)
-            continue
-
-        sa_by_index: dict[int, SentenceAnalysis] = {
-            sa.sentence_index: sa for sa in analysis.sentences
-        }
-
-        poem_rows: list[dict] = []
-        shakespeare_segs: list[str] = []
-
-        for i, meta in enumerate(sentence_meta):
-            idx = i + 1
-            sa = sa_by_index.get(idx)
-
-            if sa is None:
-                log.warning("poem_id=%s no sentence_index=%s", pid_str, idx)
-                continue
-
-            en_seg = sa.shakespearean_segment or ""
-            shakespeare_segs.append(en_seg)
-
-            base = {
-                "original_id":                   pid_str,
-                "author":                        meta["author"],
-                "year":                          year_int,
-                "temporal_period":               temporal_period,
-                "full_shakespeare_text":         "",
-                "context_sentence_en":           en_seg,
-                "context_sentence_ukr":          meta["context_ukr"],
-                "poem_perspective_primary":      pers.get("primary", ""),
-                "poem_perspective_secondary":    pers.get("secondary"),
-                "we_inclusivity":                pers.get("we_inclusivity", ""),
-                "dominant_referent_category":    pers.get("dominant_referent_category", ""),
-                "addressee_type":                pers.get("addressee_type", ""),
-                "polyphony_type":                pers.get("polyphony_type", ""),
-            }
-
-            if not sa.pronouns_found:
-                poem_rows.append({
-                    **base,
-                    "pronoun_word":    None,
-                    "person":          None,
-                    "number":          None,
-                    "is_pro_drop":     None,
-                    "source_mapping":  None,
-                    "qa_flag":         "OK",
-                })
-            else:
-                for pr in sa.pronouns_found:
-                    row_dict = {
-                        **base,
-                        "pronoun_word":    _normalize_pronoun(pr.english_pronoun),
-                        "person":          pr.person,
-                        "number":          pr.number,
-                        "is_pro_drop":     pr.is_pro_drop,
-                        "source_mapping":  pr.source_mapping,
-                        "qa_flag":         "",
-                    }
-                    row_dict["qa_flag"] = _validate_pronoun_row(row_dict)
-                    poem_rows.append(row_dict)
-
-        full_text = " ".join(s for s in shakespeare_segs if s)
-        for r in poem_rows:
-            r["full_shakespeare_text"] = full_text
-
-        _append_rows_to_csv(poem_rows, write_header=need_header)
-        need_header = False
         _save_checkpoint(pid_str)
-        log.info("poem_id=%s wrote %d rows", pid_str, len(poem_rows))
+        done_count += 1
 
-    total_cost = sum(
-        _calc_cost(model, v["prompt"], v["completion"])
-        for model, v in usage_counter.items()
-    )
+    total_tok = usage_counter["prompt"] + usage_counter["completion"]
+    cost = _calc_cost(MODEL, usage_counter["prompt"], usage_counter["completion"])
+    if cost is None:
+        cost_line = "  Cost (USD):        N/A (pricing not configured for this model)"
+    else:
+        cost_line = f"  Cost (USD):        ${cost:.4f}"
     lines = [
         "=== Token usage ===",
         f"Run time (UTC):    {datetime.now(timezone.utc).isoformat()}",
+        f"[{MODEL}]",
+        f"  Prompt tokens:     {usage_counter['prompt']:,}",
+        f"  Completion tokens: {usage_counter['completion']:,}",
+        f"  Total tokens:      {total_tok:,}",
+        cost_line,
+        f"  Poems processed:   {done_count}",
     ]
-    for model, v in usage_counter.items():
-        total_tok = v["prompt"] + v["completion"]
-        cost = _calc_cost(model, v["prompt"], v["completion"])
-        lines += [
-            f"[{model}]",
-            f"  Prompt tokens:     {v['prompt']:,}",
-            f"  Completion tokens: {v['completion']:,}",
-            f"  Total tokens:      {total_tok:,}",
-            f"  Cost (USD):        ${cost:.4f}",
-        ]
-    lines.append(f"Total est. cost (USD): ${total_cost:.4f}")
     report = "\n".join(lines)
     log.info("\n" + report)
     with open(COST_REPORT_FILE, "a", encoding="utf-8") as f:
@@ -876,7 +751,10 @@ def main():
             else:
                 log.info("QA ok %d rows", total)
         log.info("saved %s (%d rows)", OUTPUT_CSV, len(result_df))
-        log.info("raw jsonl %s", OUTPUT_JSONL)
+
+
+def main():
+    asyncio.run(async_main())
 
 
 if __name__ == "__main__":
