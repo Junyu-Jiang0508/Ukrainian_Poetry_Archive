@@ -22,11 +22,11 @@ from utils.workspace import filtering_processed_dir, repository_root_for_script
 _ROOT = repository_root_for_script(__file__)
 _FILTERING_DIR = filtering_processed_dir(_ROOT)
 
-# ── input paths ──────────────────────────────────────────────────────────────
+                                                                               
 LAYER0_CSV = _FILTERING_DIR / "layer0_poems_one_per_row.csv"
 LAYER1_CSV = _FILTERING_DIR / "layer1_stanzas_one_per_row.csv"
 
-# ── output paths ─────────────────────────────────────────────────────────────
+                                                                               
 _DEFAULT_OUTPUT_DIR = _ROOT / "data" / "Annotated_GPT"
 
 OUTPUT_DIR = _DEFAULT_OUTPUT_DIR
@@ -54,7 +54,7 @@ PRICE = {
     "gpt-4o-mini": {"input": 0.00015, "output": 0.00060},
 }
 
-# ── concurrency & chunking ───────────────────────────────────────────────────
+                                                                               
 CONCURRENCY = 15
 MAX_LINES_PER_CHUNK = 30
 MAX_COMPLETION_TOKENS = 12000
@@ -70,9 +70,9 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Pydantic schemas
-# ═══════════════════════════════════════════════════════════════════════════════
+                                                                                 
+                   
+                                                                                 
 
 class PronounAnalysis(BaseModel):
     english_pronoun: str = Field(
@@ -149,9 +149,9 @@ class PoemStanzaAnnotation(BaseModel):
     )
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Prompt
-# ═══════════════════════════════════════════════════════════════════════════════
+                                                                                 
+         
+                                                                                 
 
 STANZA_PROMPT = """\
 You are a Ukrainian linguistics specialist. You will receive numbered stanzas
@@ -198,9 +198,9 @@ Return JSON matching PoemStanzaAnnotation. No extra text.\
 """
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Stanza chunking
-# ═══════════════════════════════════════════════════════════════════════════════
+                                                                                 
+                  
+                                                                                 
 
 def _build_chunk_mapping(
     stanza_texts: list[str],
@@ -221,9 +221,9 @@ def _build_chunk_mapping(
     return mapping
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Utilities
-# ═══════════════════════════════════════════════════════════════════════════════
+                                                                                 
+            
+                                                                                 
 
 def _normalize_pronoun(raw: str) -> str:
     if not raw:
@@ -292,9 +292,9 @@ def _calc_cost(model: str, prompt_tokens: int, completion_tokens: int) -> Option
             + completion_tokens / 1000 * p["output"])
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Async GPT call with retry
-# ═══════════════════════════════════════════════════════════════════════════════
+                                                                                 
+                            
+                                                                                 
 
 _semaphore: asyncio.Semaphore | None = None
 
@@ -387,9 +387,9 @@ async def analyze_stanza_batch(
     return parsed, usage
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  QA validation
-# ═══════════════════════════════════════════════════════════════════════════════
+                                                                                 
+                
+                                                                                 
 
 _UKR_TOKEN = re.compile(r"[а-яіїєґ']+", re.IGNORECASE)
 _THOU_FORMS = frozenset({"thou", "thee", "thy", "thine", "thyself"})
@@ -471,9 +471,9 @@ def _validate_pronoun_row(row: dict) -> str:
     return "OK"
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Data loading
-# ═══════════════════════════════════════════════════════════════════════════════
+                                                                                 
+               
+                                                                                 
 
 def _year_from_date(val) -> Optional[int]:
     if val is None or pd.isna(val):
@@ -538,16 +538,16 @@ def load_data(
     return stanzas, poem_meta
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Per-poem processing (async)
-# ═══════════════════════════════════════════════════════════════════════════════
+                                                                                 
+                              
+                                                                                 
 
 async def process_poem(
     pid_str: str,
     grp: pd.DataFrame,
     meta: dict,
 ) -> tuple[str, list[dict], dict]:
-    """Annotate one poem. Returns (poem_id, csv_rows, usage_delta)."""
+    """Annotate one poem."""
     usage_delta = {"prompt": 0, "completion": 0}
 
     stanza_texts: list[str] = []
@@ -643,9 +643,9 @@ async def process_poem(
     return pid_str, poem_rows, usage_delta
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Main
-# ═══════════════════════════════════════════════════════════════════════════════
+                                                                                 
+       
+                                                                                 
 
 async def async_main():
     global _semaphore, MODEL

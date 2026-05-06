@@ -14,6 +14,6 @@ STANDARD_ANNOTATION_READ_KW: dict[str, Any] = {
 
 
 def read_annotation_csv(path: Path | str, **kwargs: Any) -> pd.DataFrame:
-    """Merge ``STANDARD_ANNOTATION_READ_KW`` with caller overrides (e.g. ``dtype=``)."""
+    """Merge ``STANDARD_ANNOTATION_READ_KW`` with caller overrides (e.g."""
     merged: dict[str, Any] = {**STANDARD_ANNOTATION_READ_KW, **kwargs}
     return pd.read_csv(path, **merged)

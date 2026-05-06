@@ -42,11 +42,7 @@ def load_allowed_author_names(
     *,
     alias_columns: list[str] | None = None,
 ) -> set[str]:
-    """
-    Build author allow-list from ``author.xlsx`` where include-column is yes.
-
-    Returns a set of normalized names across alias columns.
-    """
+    """Build author allow-list from ``author.xlsx`` where include-column is yes."""
     author_df = pd.read_excel(path)
     if PUBLIC_INCLUDE_COL not in author_df.columns:
         raise KeyError(

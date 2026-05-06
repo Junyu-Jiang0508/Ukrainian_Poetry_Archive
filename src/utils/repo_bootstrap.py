@@ -1,9 +1,4 @@
-"""Stdlib-only bootstrap for scripts executed as ``python src/utils/<name>.py``.
-
-In that execution mode ``sys.path[0]`` is ``.../src/utils``, so the ``utils``
-package is not importable until ``<repo>/src`` is prepended. Import this module
-first (same directory), call ``prepare_repo``, then ``from utils.…``.
-"""
+"""Stdlib-only bootstrap for scripts executed as ``python src/utils/<name>.py``."""
 
 from __future__ import annotations
 

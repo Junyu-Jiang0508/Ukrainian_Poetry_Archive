@@ -1,16 +1,4 @@
-"""Layer 0–1 corpus preprocessing: multi-poem split + deterministic stanza segmentation.
-
-Layer 0: one Facebook post row → one row per sub-poem (ID → {ID}_{k}), with QC vs
-``Multiple poem info``. Mismatches after best-effort repair go to a human review queue. Optional ``layer0_split_overrides.csv`` (line-based cuts) and optional
-``--gpt-adjudication`` JSON (e.g. Batch output ``layer0_gpt_adjudication.json``)
-to apply ``true_poem_count`` and optional ``line_starts_zero_based`` for posts
-that were in the human-review queue. Manual CSV overrides take precedence over GPT.
-
-Layer 1: one poem → one row per stanza (blank-line boundaries + light *-heuristics),
-trailing dates / author signatures peeled into metadata columns.
-
-Outputs under ``data/To_run/00_filtering/`` by default (see ``utils.workspace.filtering_processed_dir``).
-"""
+"""Layer 0-1 preprocessing: post -> sub-poems -> stanzas."""
 from __future__ import annotations
 
 import argparse
@@ -38,21 +26,16 @@ _STRATEGY_ORDER = (
     "double_blank",
 )
 
-# Line is only asterisks (group-separator style), including ``* * *``.
 _RE_ASTERISK_LINE = re.compile(r"^\s*\*{2,}\s*$")
 _RE_ASTERISK_SPACED_LINE = re.compile(r"^\s*(?:\*\s*){2,}\s*$")
-# Line is only repeated dash / underscore / equals (section divider).
 _RE_RULE_SEPARATOR_LINE = re.compile(r"^\s*(?:[-_=]){3,}\s*$")
-# Line is only "12." / "IV." style index.
 _RE_NUMBER_ONLY_LINE = re.compile(
     r"^\s*(?:[IVXLCDM]{1,8}|[ivxlcdm]{1,8}|\d{1,2})\.\s*$"
 )
-# Line starts with index then text (e.g. "1. niewyrażalne").
 _RE_NUMBER_THEN_TEXT = re.compile(
     r"^\s*(?:\d{1,2}|[IVXLCDM]{1,8}|[ivxlcdm]{1,8})\.\s+\S"
 )
 _RE_DOUBLE_BLANK_SPLIT = re.compile(r"\n(?:[ \t]*\n)+")
-# Trailing date like 12.02.22 or 12.02.2022
 _RE_TRAILING_DATE = re.compile(
     r"^\s*\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4})?\s*$"
 )
@@ -75,7 +58,7 @@ def normalize_record_id(raw: object) -> str:
 
 
 def parse_expected_poem_count(val: object) -> int:
-    """Parse ``Multiple poem info``; NaN / unknown → 1."""
+    """Parse expected poem count."""
     if val is None or (isinstance(val, float) and pd.isna(val)):
         return 1
     s = str(val).strip().lower()
@@ -92,40 +75,41 @@ def _is_asterisk_only_boundary_line(ln: str) -> bool:
     return bool(_RE_ASTERISK_LINE.match(ln) or _RE_ASTERISK_SPACED_LINE.match(ln))
 
 
-def split_by_asterisk_lines(text: str) -> list[str]:
+def _split_by_line_predicate(
+    text: str,
+    is_boundary,
+    *,
+    keep_boundary_line: bool = False,
+    require_nonzero_index: bool = False,
+) -> list[str]:
     lines = _norm_newlines(text).split("\n")
-    breaks = [i for i, ln in enumerate(lines) if _is_asterisk_only_boundary_line(ln)]
+    breaks = [
+        i
+        for i, ln in enumerate(lines)
+        if (not require_nonzero_index or i > 0) and is_boundary(ln)
+    ]
     if not breaks:
         return [text]
+
     segs: list[str] = []
     start = 0
     for b in breaks:
         chunk = "\n".join(lines[start:b]).strip()
         if chunk:
             segs.append(chunk)
-        start = b + 1
+        start = b if keep_boundary_line else b + 1
     tail = "\n".join(lines[start:]).strip()
     if tail:
         segs.append(tail)
     return segs if segs else [text.strip()]
+
+
+def split_by_asterisk_lines(text: str) -> list[str]:
+    return _split_by_line_predicate(text, _is_asterisk_only_boundary_line)
 
 
 def split_by_dash_rule_lines(text: str) -> list[str]:
-    lines = _norm_newlines(text).split("\n")
-    breaks = [i for i, ln in enumerate(lines) if _RE_RULE_SEPARATOR_LINE.match(ln)]
-    if not breaks:
-        return [text]
-    segs: list[str] = []
-    start = 0
-    for b in breaks:
-        chunk = "\n".join(lines[start:b]).strip()
-        if chunk:
-            segs.append(chunk)
-        start = b + 1
-    tail = "\n".join(lines[start:]).strip()
-    if tail:
-        segs.append(tail)
-    return segs if segs else [text.strip()]
+    return _split_by_line_predicate(text, lambda ln: bool(_RE_RULE_SEPARATOR_LINE.match(ln)))
 
 
 def _is_strong_separator_line(ln: str) -> bool:
@@ -139,11 +123,7 @@ def _is_strong_separator_line(ln: str) -> bool:
 
 
 def split_by_first_separator_boundaries(text: str, expected_n: int) -> list[str] | None:
-    """Split on ``expected_n - 1`` separator-only lines (``* * *``, ``---``, …).
-
-    Uses the first ``n-1`` separators when exactly that many exist; if more exist,
-    picks separators spread across the post (reduces false merges for multi-poem FB dumps).
-    """
+    """Split by separator-only lines to match ``expected_n``."""
     if expected_n <= 1:
         return None
     lines = _norm_newlines(text).split("\n")
@@ -178,39 +158,21 @@ def split_by_first_separator_boundaries(text: str, expected_n: int) -> list[str]
 
 
 def split_by_number_only_lines(text: str) -> list[str]:
-    lines = _norm_newlines(text).split("\n")
-    breaks = [i for i, ln in enumerate(lines) if i > 0 and _RE_NUMBER_ONLY_LINE.match(ln)]
-    if not breaks:
-        return [text]
-    segs: list[str] = []
-    start = 0
-    for b in breaks:
-        chunk = "\n".join(lines[start:b]).strip()
-        if chunk:
-            segs.append(chunk)
-        start = b
-    tail = "\n".join(lines[start:]).strip()
-    if tail:
-        segs.append(tail)
-    return segs if segs else [text.strip()]
+    return _split_by_line_predicate(
+        text,
+        lambda ln: bool(_RE_NUMBER_ONLY_LINE.match(ln)),
+        keep_boundary_line=True,
+        require_nonzero_index=True,
+    )
 
 
 def split_by_number_then_text_lines(text: str) -> list[str]:
-    lines = _norm_newlines(text).split("\n")
-    breaks = [i for i, ln in enumerate(lines) if i > 0 and _RE_NUMBER_THEN_TEXT.match(ln)]
-    if not breaks:
-        return [text]
-    segs: list[str] = []
-    start = 0
-    for b in breaks:
-        chunk = "\n".join(lines[start:b]).strip()
-        if chunk:
-            segs.append(chunk)
-        start = b
-    tail = "\n".join(lines[start:]).strip()
-    if tail:
-        segs.append(tail)
-    return segs if segs else [text.strip()]
+    return _split_by_line_predicate(
+        text,
+        lambda ln: bool(_RE_NUMBER_THEN_TEXT.match(ln)),
+        keep_boundary_line=True,
+        require_nonzero_index=True,
+    )
 
 
 def split_by_double_blank(text: str) -> list[str]:
@@ -243,7 +205,7 @@ def merge_segments_down(segments: list[str], target_n: int) -> list[str]:
 
 
 def split_text_at_line_starts(text: str, starts: list[int]) -> list[str]:
-    """Cut ``text`` at 0-based line indices of each poem's first line (first poem must start at 0)."""
+    """Cut text by 0-based poem start lines."""
     lines = _norm_newlines(text).split("\n")
     st = sorted({int(x) for x in starts})
     if not st:
@@ -260,7 +222,7 @@ def split_text_at_line_starts(text: str, starts: list[int]) -> list[str]:
 
 
 def load_split_overrides(path: Path) -> dict[str, list[int]]:
-    """``layer0_split_overrides.csv``: columns ``parent_id``, ``line_starts_zero_based`` (``0|45|200``)."""
+    """Load manual split overrides."""
     if not path.is_file():
         return {}
     odf = pd.read_csv(path, dtype=str)
@@ -284,7 +246,7 @@ def load_split_overrides(path: Path) -> dict[str, list[int]]:
 
 
 def _line_starts_from_gpt_field(ls: object, expected_n: int) -> list[int] | None:
-    """Validate ``line_starts_zero_based`` as ``expected_n`` 0-based poem starts (first must be 0)."""
+    """Validate GPT line starts."""
     if ls is None or (isinstance(ls, float) and pd.isna(ls)):
         return None
     if isinstance(ls, list):
@@ -306,11 +268,7 @@ def _line_starts_from_gpt_field(ls: object, expected_n: int) -> list[int] | None
 def _repair_line_starts_omitted_leading_zero(
     ls: object, declared_n: int
 ) -> tuple[list[int], int] | None:
-    """If GPT returned ``declared_n`` ascending starts but skipped line 0 (preface + N poems).
-
-    Returns ``([0] + starts, declared_n + 1)`` so downstream ``split_text_at_line_starts``
-    yields ``declared_n + 1`` non-empty segments. Otherwise None.
-    """
+    """Repair GPT starts when leading 0 is omitted."""
     if declared_n < 2:
         return None
     if isinstance(ls, list):
@@ -333,11 +291,7 @@ def _repair_line_starts_omitted_leading_zero(
 
 
 def load_gpt_adjudication(path: Path) -> dict[str, dict]:
-    """Load ``layer0_gpt_adjudication.json`` from OpenAI Batch ``finalize``.
-
-    Maps ``parent_id`` → ``verdict``, ``true_poem_count`` (effective target), and
-    optional ``line_starts`` when valid. Rows with ``verdict`` ambiguous are skipped.
-    """
+    """Load GPT adjudication rows keyed by parent id."""
     if not path.is_file():
         return {}
     try:
@@ -381,11 +335,7 @@ def load_gpt_adjudication(path: Path) -> dict[str, dict]:
 
 
 def split_into_subpoems(text: str, expected_n: int) -> tuple[list[str], str, bool, bool]:
-    """Return (segments, method, qc_ok, repaired).
-
-    qc_ok True iff final segment count equals expected_n without under-splitting.
-    repaired True if merge_segments_down was applied.
-    """
+    """Return (segments, method, qc_ok, repaired)."""
     if not text or not str(text).strip():
         if expected_n <= 1:
             return ([""], "empty", True, False)
@@ -394,17 +344,15 @@ def split_into_subpoems(text: str, expected_n: int) -> tuple[list[str], str, boo
     if expected_n <= 1:
         return ([_norm_newlines(text).strip()], "single", True, False)
 
-    best_name = _STRATEGY_ORDER[0]
+    best_rank, best_name = 0, _STRATEGY_ORDER[0]
     best_segs: list[str] = []
     best_dist = 10**9
-    for name in _STRATEGY_ORDER:
+    for rank, name in enumerate(_STRATEGY_ORDER):
         segs = [s for s in _strategy_fn(name)(text) if s.strip()]
         dist = abs(len(segs) - expected_n)
-        if dist < best_dist or (
-            dist == best_dist
-            and _STRATEGY_ORDER.index(name) < _STRATEGY_ORDER.index(best_name)
-        ):
+        if dist < best_dist or (dist == best_dist and rank < best_rank):
             best_dist = dist
+            best_rank = rank
             best_segs = segs
             best_name = name
 
@@ -426,7 +374,7 @@ def _norm_author_key(name: str) -> str:
 
 
 def peel_trailing_poem_metadata(text: str, author_display: str) -> tuple[str, str, str]:
-    """Strip trailing blank lines, optional date line, optional author signature line."""
+    """Strip optional trailing date/signature lines."""
     t = _norm_newlines(text).strip()
     if not t:
         return "", "", ""
@@ -468,7 +416,7 @@ def _substantial_stanza(block: str, min_lines: int = 3, min_chars: int = 120) ->
 
 
 def refine_stanza_decoration_blocks(blocks: list[str]) -> list[str]:
-    """Resolve * * * / ***-only blocks between blank-line splits."""
+    """Resolve separator-only decoration blocks."""
     if not blocks:
         return blocks
     out: list[str] = []
@@ -501,7 +449,7 @@ def segment_stanzas(
     poem_text: str,
     author_for_peel: str = "",
 ) -> tuple[list[str], str, str]:
-    """Return (stanza_texts, trailing_date, trailing_signature) from one poem body."""
+    """Return stanzas and trailing metadata."""
     peeled, td, ts = peel_trailing_poem_metadata(poem_text, author_for_peel)
     if not peeled:
         return [], td, ts
@@ -538,10 +486,7 @@ def run_layer0(
 
     for idx, row in df.iterrows():
         raw_id = normalize_record_id(row.get("ID", ""))
-        if not raw_id:
-            parent_key = f"__row_index_{idx}"
-        else:
-            parent_key = raw_id
+        parent_key = raw_id or f"__row_index_{idx}"
 
         author = row.get("Author of poem", "")
         if pd.isna(author):
@@ -594,15 +539,12 @@ def run_layer0(
             review_rows.append(
                 {
                     "parent_id": parent_key,
-                    "row_index": idx,
                     "expected_sub_poems": expected_n,
                     "obtained_sub_poems": len(segments),
                     "split_strategy": method,
                     "repaired_by_merge": repaired,
                     "multiple_poem_info_raw": row.get(_MULTI_COL, ""),
                     "author": author,
-                    "text_head": text[:400].replace("\n", " "),
-                    "text_tail": text[-400:].replace("\n", " ") if len(text) > 400 else "",
                 }
             )
 
@@ -632,7 +574,7 @@ def run_layer0(
 
 
 def run_layer1(layer0_df: pd.DataFrame) -> pd.DataFrame:
-    """Build long stanza table from Layer 0 output."""
+    """Build stanza table from layer0 output."""
     if layer0_df.empty:
         return pd.DataFrame(
             columns=[

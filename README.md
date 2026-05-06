@@ -29,19 +29,19 @@ Ukrainian-Poetry/
 │
 ├── src/                       # Analysis pipeline (numbered by execution order)
 │   ├── 00_filtering.py              # Corpus language filtering
-│   ├── 01_pronoun_detection.py      # Morphological pronoun extraction
+│   ├── 01_annotation_pronoun_detection.py      # Morphological pronoun extraction
 │   ├── 01b_generate_cooccurrence.py # Pronoun--word co-occurrence matrix
-│   ├── 02_pronoun_cooccurrence.py   # Co-occurrence network visualization
-│   ├── 03_pronoun_semantic_space.py # UMAP embedding & clustering
-│   ├── 04_annotation_toolkit.py     # Stratified sampling & IAA helpers
-│   ├── 05_annotate_pronouns.py      # Rule-based pronoun classification
-│   ├── 06_pronoun_projection.py     # Cross-lingual pronoun alignment
-│   ├── 07_gpt_annotation.py         # Batch GPT-4o annotation engine
-│   ├── 08_adaptive_binning.py       # Adaptive temporal binning
-│   ├── 09_breakpoint_regression.py  # WLS regression & PELT changepoints
-│   ├── 10_public_list_filter.py     # Public-list corpus subset
-│   ├── 11_gpt_annotate_full.py      # Full-corpus GPT annotation runner
-│   ├── 12_gpt_annotation_exploration.py  # Annotation quality exploration
+│   ├── 02_modeling_pronoun_cooccurrence.py    # Co-occurrence network visualization
+│   ├── 02_modeling_pronoun_semantic_space.py  # UMAP embedding & clustering
+│   ├── 01_annotation_toolkit.py     # Stratified sampling & IAA helpers
+│   ├── 01_annotation_rule_annotate_pronouns.py      # Rule-based pronoun classification
+│   ├── 02_modeling_pronoun_projection.py      # Cross-lingual pronoun alignment
+│   ├── 01_annotation_gpt_annotation.py        # Batch GPT annotation engine
+│   ├── 02_modeling_adaptive_binning.py        # Adaptive temporal binning
+│   ├── 02_modeling_breakpoint_regression.py   # WLS regression & PELT changepoints
+│   ├── 00_public_list_filter.py     # Public-list corpus subset
+│   ├── 01_annotation_gpt_annotate_full.py      # Full-corpus GPT annotation runner
+│   ├── 01_annotation_gpt_exploration.py  # Annotation quality exploration
 │   ├── 13_rq1_we_type_analysis.py   # RQ1: we-type temporal analysis
 │   ├── 14_rq2_addressee_analysis.py # RQ2: addressee-type analysis
 │   ├── 15_poem_perspective_analysis.py   # Poem-level perspective shifts
@@ -100,7 +100,7 @@ Scripts are numbered by execution order. Each script can be run independently fr
 
 ```bash
 python src/00_filtering.py
-python src/01_pronoun_detection.py
+python src/01_annotation_pronoun_detection.py
 # ...
 python src/20_descriptive_statistics.py
 ```

@@ -1,15 +1,4 @@
-"""OpenAI Batch: adjudicate ``layer0_human_review_queue`` rows.
-
-Commands: prepare | submit | poll | finalize | merge-adjudications | run-sync
-
-Round 2: point ``--queue`` at the shrunk CSV, ``--workdir`` at a new folder
-(e.g. batch_adjudication_r2), add ``--retry``, then ``merge-adjudications`` the
-new ``layer0_gpt_adjudication.json`` on top of round 1 before ``00_filtering.py``.
-
-``run-sync`` calls Chat Completions immediately (no Batch queue), with retries,
-for small queues — use e.g. ``--model gpt-5.1`` when you need a strong model and
-deterministic completion for a handful of rows.
-"""
+"""Batch/sync adjudication for layer0 review queue."""
 from __future__ import annotations
 
 import argparse
@@ -30,7 +19,6 @@ _DEFAULT_WORKDIR = _ROOT / "data" / "To_run" / "00_filtering" / "batch_adjudicat
 
 _TEXT_COL = "Poem full text (copy and paste)"
 
-# ~12k chars ≈ a few k tokens; truncation keeps batch cost bounded on outliers.
 _DEFAULT_MAX_POEM_CHARS = 12000
 
 _SYSTEM = (
@@ -58,7 +46,6 @@ _SYSTEM_RETRY_SUFFIX = (
     "(for >=2 poems) or use ambiguous — avoid annotation_correct with >=2 poems and null line_starts."
 )
 
-# Extra rules for synchronous runs on posts that already failed rule+QG alignment once.
 _SYSTEM_RUN_SYNC_EXTRA = (
     "\nLINE_INDEX_QC (mandatory): Indices in line_starts_zero_based refer to FULL_TEXT_LINES_BELOW "
     "split on \\n only, 0-based, counting from 0 up to lines_total-1 (use the same lines_total as in "
@@ -96,8 +83,6 @@ def _build_user_block(
     got: int,
     raw_ann: str,
     author: str,
-    head: str,
-    tail: str,
     poem: str,
     truncated: bool,
 ) -> str:
@@ -110,8 +95,6 @@ def _build_user_block(
         "author": author,
         "lines_total": nlines,
         "truncated": truncated,
-        "preview_head": (head or "")[:350],
-        "preview_tail": (tail or "")[-350:],
     }
     return json.dumps(meta, ensure_ascii=False) + "\n---\nFULL_TEXT_LINES_BELOW\n---\n" + poem
 
@@ -155,8 +138,6 @@ def cmd_prepare(args: argparse.Namespace) -> int:
             got = int(it.get("obtained_sub_poems", 1) or 1)
             raw_ann = str(it.get("multiple_poem_info_raw", "") or "")
             author = str(it.get("author", "") or "")
-            head = str(it.get("text_head", "") or "")
-            tail = str(it.get("text_tail", "") or "")
             raw_poem = text_by_id.get(pid)
             if raw_poem is None or (isinstance(raw_poem, float) and pd.isna(raw_poem)):
                 poem = ""
@@ -168,7 +149,7 @@ def cmd_prepare(args: argparse.Namespace) -> int:
                     n_trunc += 1
 
             cid = _sanitize_custom_id(pid)
-            user = _build_user_block(pid, exp, got, raw_ann, author, head, tail, poem, truncated)
+            user = _build_user_block(pid, exp, got, raw_ann, author, poem, truncated)
             sys_content = _SYSTEM + (_SYSTEM_RETRY_SUFFIX if getattr(args, "retry", False) else "")
             body = {
                 "model": args.model,
@@ -279,7 +260,7 @@ def _merge_adjudication_write(
     *,
     replace_adjudication: bool,
 ) -> tuple[int, int]:
-    """Merge ``success_objs`` into ``workdir/layer0_gpt_adjudication.json``."""
+    """Merge rows into ``layer0_gpt_adjudication.json``."""
     batch_by: dict[str, dict] = {}
     for obj in success_objs:
         pid = str(obj.get("parent_id", "")).strip()
@@ -311,7 +292,7 @@ def _merge_adjudication_write(
 
 
 def cmd_run_sync(args: argparse.Namespace) -> int:
-    """Synchronous chat completions for each queue row; merge into adjudication JSON."""
+    """Run synchronous chat completions and merge outputs."""
     load_dotenv()
     workdir = Path(args.workdir).resolve()
     workdir.mkdir(parents=True, exist_ok=True)
@@ -357,8 +338,6 @@ def cmd_run_sync(args: argparse.Namespace) -> int:
         got = int(it.get("obtained_sub_poems", 1) or 1)
         raw_ann = str(it.get("multiple_poem_info_raw", "") or "")
         author = str(it.get("author", "") or "")
-        head = str(it.get("text_head", "") or "")
-        tail = str(it.get("text_tail", "") or "")
         raw_poem = text_by_id.get(pid)
         if raw_poem is None or (isinstance(raw_poem, float) and pd.isna(raw_poem)):
             print(f"error: parent_id {pid!r} not found in database", file=sys.stderr)
@@ -366,7 +345,7 @@ def cmd_run_sync(args: argparse.Namespace) -> int:
         poem, truncated = _truncate_poem(str(raw_poem), args.max_poem_chars)
         if truncated:
             print(f"note: {pid} poem middle-truncated at {args.max_poem_chars} chars")
-        user = _build_user_block(pid, exp, got, raw_ann, author, head, tail, poem, truncated)
+        user = _build_user_block(pid, exp, got, raw_ann, author, poem, truncated)
         cid = _sanitize_custom_id(pid)
 
         last_err: Exception | None = None
@@ -628,7 +607,7 @@ def cmd_finalize(args: argparse.Namespace) -> int:
 
 
 def cmd_merge_adjudications(args: argparse.Namespace) -> int:
-    """Merge two adjudication JSON arrays: ``--override`` wins on same parent_id."""
+    """Merge two adjudication arrays; override wins by parent_id."""
     base_path = Path(args.base).resolve()
     ovr_path = Path(args.override).resolve()
     out_path = Path(args.out).resolve()

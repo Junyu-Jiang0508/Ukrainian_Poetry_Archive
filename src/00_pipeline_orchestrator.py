@@ -32,7 +32,7 @@ def _select_stage_ids(args: argparse.Namespace, ordered_ids: list[str]) -> set[s
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Unified runner for stages 00a..18.",
+        description="Unified runner for stages 00a..03b.",
     )
     parser.add_argument("--list", action="store_true", help="List stages and exit.")
     parser.add_argument("--from-stage", dest="from_stage", default=None)

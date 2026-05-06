@@ -1,4 +1,4 @@
-"""Merge two manual annotator CSVs; align GPT detailed; write confusion matrices and metrics (no API)."""
+"""Merge two manual annotator CSVs; align GPT detailed; write confusion matrices and met..."""
 import os
 
 import repo_bootstrap
@@ -10,7 +10,7 @@ from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
 
 DATA_DIR = "data"
 ANNOTATIONS_DIR = os.path.join(DATA_DIR, "annotations")
-OUTPUT_DIR = os.path.join("outputs", "01_pronoun_detection")
+OUTPUT_DIR = os.path.join("outputs", "01_annotation_pronoun_detection")
 FILE_JUNYU = os.path.join(ANNOTATIONS_DIR, "manual_annotation_result_Junyu.csv")
 FILE_JUNYU1 = os.path.join(ANNOTATIONS_DIR, "manual_annotation_result_junyu1.csv")
 GPT_DETAILED = os.path.join(OUTPUT_DIR, "gpt_annotation_detailed.csv")

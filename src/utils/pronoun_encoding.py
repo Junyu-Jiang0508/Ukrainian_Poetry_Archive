@@ -13,12 +13,7 @@ def normalize_annotation_str(value: object) -> str:
 
 
 def pronoun_class_sixway_column(df: pd.DataFrame) -> pd.Series:
-    """
-    Vector map of ``person`` × ``number`` to ``{1sg,1pl,2sg,2pl,3sg,3pl}``.
-
-    Returns empty string where the pair is not one of the six classes (same
-    convention as row-wise ``pronoun_class_sixway`` mapped to ``\"\"`` in plots).
-    """
+    """Vector map of ``person`` × ``number`` to ``{1sg,1pl,2sg,2pl,3sg,3pl}``."""
     if "person" not in df.columns or "number" not in df.columns:
         return pd.Series("", index=df.index, dtype=object)
     person = df["person"].fillna("").astype(str).str.strip()
@@ -34,10 +29,7 @@ def pronoun_class_sixway_column(df: pd.DataFrame) -> pd.Series:
 
 
 def pronoun_class_sixway(row: pd.Series) -> str | None:
-    """
-    Map person (1st/2nd/3rd) + number (Singular/Plural) to {1sg,1pl,2sg,2pl,3sg,3pl}.
-    Returns None if the combination is not one of the six classes.
-    """
+    """Map person (1st/2nd/3rd) + number (Singular/Plural) to {1sg,1pl,2sg,2pl,3sg,3pl}."""
     person = normalize_annotation_str(row.get("person"))
     number = normalize_annotation_str(row.get("number"))
     if person == "1st" and "Sing" in number:

@@ -11,8 +11,8 @@ from sklearn.metrics import precision_recall_fscore_support
 from utils.label_normalization import normalize_person_number_label
 
 MERGED_FILE = os.path.join("data", "annotations", "manual_annotation_merged_with_gpt.csv")
-METRICS_OUTPUT = os.path.join("outputs", "01_pronoun_detection", "validation_merged_metrics.csv")
-ERROR_OUTPUT = os.path.join("outputs", "01_pronoun_detection", "validation_merged_errors.csv")
+METRICS_OUTPUT = os.path.join("outputs", "01_annotation_pronoun_detection", "validation_merged_metrics.csv")
+ERROR_OUTPUT = os.path.join("outputs", "01_annotation_pronoun_detection", "validation_merged_errors.csv")
 
 
 def main():

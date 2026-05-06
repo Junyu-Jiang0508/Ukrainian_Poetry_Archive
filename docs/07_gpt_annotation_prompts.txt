@@ -1,5 +1,5 @@
 ================================================================================
-GPT annotation prompts (from src/07_gpt_annotation.py)
+GPT annotation prompts (from src/01_annotation_gpt_annotation.py)
 ================================================================================
 Two system prompts: (1) sentence-level pronoun + Shakespearean translation,
 (2) poem-level perspective. Model names and API wiring are in the Python file.

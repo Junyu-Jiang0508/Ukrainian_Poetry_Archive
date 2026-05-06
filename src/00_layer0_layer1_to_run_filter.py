@@ -1,12 +1,4 @@
-"""Filter To_run layer0/layer1 CSVs for public corpus uniqueness.
-
-Drops rows that are translation posts (non-empty original-language or original-URL
-cells) and rows whose ``Author of poem`` is not on the allow-list from
-``data/raw/author.xlsx`` where ``Include in public list`` is yes (same rules as
-``10_public_list_filter.py``).
-
-Stanzas are kept only when ``poem_id`` remains in the filtered layer0 table.
-"""
+"""Filter To_run layer0/layer1 CSVs for public corpus uniqueness."""
 from __future__ import annotations
 
 import argparse

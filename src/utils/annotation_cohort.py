@@ -26,10 +26,7 @@ def load_core_temporal_cohort(
     with_period_column: bool = True,
     author_keys: bool = False,
 ) -> pd.DataFrame:
-    """
-    Restrict to core temporal periods (2014_2021, post_2022), optional QA-clean rows,
-    optional _period mirror column, optional author normalization columns for heterogeneity.
-    """
+    """Restrict to core temporal periods (2014_2021, post_2022), optional QA-clean rows, opt..."""
     df = load_gpt_annotation_derived(path)
     df = df[df["temporal_period_reconciled"].isin(CORE_TEMPORAL_PERIODS)].copy()
     if qa_clean:

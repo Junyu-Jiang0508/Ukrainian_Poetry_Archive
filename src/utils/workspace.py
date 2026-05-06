@@ -1,8 +1,4 @@
-"""Repository layout, canonical artifact paths, and runtime environment for batch scripts.
-
-Consolidates path helpers and ``chdir`` / ``sys.path`` setup so pipelines share one
-maintenance surface.
-"""
+"""Repository layout, canonical artifact paths, and runtime environment for batch scripts."""
 
 from __future__ import annotations
 
@@ -38,10 +34,7 @@ def prepare_analysis_environment(
     *,
     matplotlib_backend: str | None = "Agg",
 ) -> Path:
-    """
-    ``chdir`` to repo root, prepend ``<root>/src`` to ``sys.path``, optionally set a
-    matplotlib backend before ``pyplot`` is imported. Returns the repo root.
-    """
+    """``chdir`` to repo root, prepend ``<root>/src`` to ``sys.path``, optionally set a matp..."""
     root = repository_root_for_script(script_file)
     src = str(root / "src")
     if src not in sys.path:
@@ -67,9 +60,6 @@ def public_list_pronouns_detailed_csv(root: Path | None = None) -> Path:
 
 
 def filtering_processed_dir(root: Path | None = None) -> Path:
-    """Output directory for stanza / sub-poem preprocessing (layer 0–1).
-
-    Default: ``<repo>/data/To_run/00_filtering/`` (override with ``00_filtering.py --out-dir``).
-    """
+    """Output directory for stanza / sub-poem preprocessing (layer 0–1)."""
     r = root if root is not None else repository_root()
     return r / "data" / "To_run" / "00_filtering"

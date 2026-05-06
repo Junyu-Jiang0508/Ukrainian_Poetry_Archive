@@ -1,4 +1,4 @@
-"""Manual pronoun annotation app. Output format matches gpt_annotation_test_result.csv."""
+"""Manual pronoun annotation app."""
 import json
 import os
 
@@ -17,11 +17,11 @@ OUTPUT_COLUMNS = [
     "shakespeare_text", "gpt_annotations",
 ]
 
-SENTENCE_FILE = "outputs/01_pronoun_detection/poems_for_manual_annotation.csv"
-OUTPUT_FILE = "outputs/01_pronoun_detection/manual_annotation_result.csv"
-PROGRESS_FILE = "outputs/01_pronoun_detection/manual_annotation_progress.json"
-POEM_PERSPECTIVE_FILE = "outputs/01_pronoun_detection/manual_annotation_poem_perspectives.json"
-POEM_PERSPECTIVE_CSV = "outputs/01_pronoun_detection/manual_annotation_poem_perspectives.csv"
+SENTENCE_FILE = "outputs/01_annotation_pronoun_detection/poems_for_manual_annotation.csv"
+OUTPUT_FILE = "outputs/01_annotation_pronoun_detection/manual_annotation_result.csv"
+PROGRESS_FILE = "outputs/01_annotation_pronoun_detection/manual_annotation_progress.json"
+POEM_PERSPECTIVE_FILE = "outputs/01_annotation_pronoun_detection/manual_annotation_poem_perspectives.json"
+POEM_PERSPECTIVE_CSV = "outputs/01_annotation_pronoun_detection/manual_annotation_poem_perspectives.csv"
 
 PERSON_OPTIONS = ["1st", "2nd", "3rd", "Impersonal"]
 NUMBER_OPTIONS = ["Singular", "Plural", "None"]
@@ -130,7 +130,7 @@ def save_final_output(annotations, sentences_df):
     rows = []
     for a in annotations:
         if a.get("no_pronoun"):
-            continue  # Skip marker records; only export pronoun annotations
+            continue                                                        
         sent = sentences_df[(sentences_df["ID"] == a["ID"]) & (sentences_df["sentence_id"] == a["sentence_id"])]
         if sent.empty:
             continue
@@ -243,7 +243,7 @@ def main():
     existing = [a for a in st.session_state.annotations if str(a["ID"]) == str(row["ID"]) and int(a.get("sentence_id", 0)) == int(row["sentence_id"])]
     existing_pronouns = [a for a in existing if not a.get("no_pronoun")]
 
-    default_has = 0 if existing_pronouns else 1  # Yes if has pronoun annotations, else No
+    default_has = 0 if existing_pronouns else 1                                           
     has_pronoun = st.radio("**Does this sentence have a pronoun?**", ["Yes", "No"], index=default_has, horizontal=True, key=f"has_pronoun_{key_suffix}")
 
     if has_pronoun == "Yes":
@@ -316,9 +316,9 @@ def main():
 
     else:
         def _do_save_no_pronoun(and_next: bool):
-            # Remove any pronoun annotations for this sentence
+                                                              
             st.session_state.annotations = [a for a in st.session_state.annotations if (str(a["ID"]), int(a.get("sentence_id", 0))) != sent_key]
-            # Add a "no_pronoun" marker so the sentence counts as reviewed for poem perspective
+                                                                                               
             st.session_state.annotations.append({
                 "ID": str(row["ID"]),
                 "sentence_id": int(row["sentence_id"]) if pd.notna(row["sentence_id"]) else 0,
@@ -343,7 +343,7 @@ def main():
             except Exception as e:
                 st.error(f"Save failed: {e}")
 
-    # Poem perspective: show when poem is fully annotated
+                                                         
     poem_id = str(row["ID"])
     poem_fully_done = is_poem_fully_annotated(poem_id, display_df, reviewed)
     if poem_fully_done:
@@ -355,7 +355,7 @@ def main():
         current = st.session_state.poem_perspectives.get(poem_id, {})
         primary = current.get("perspective_primary", current.get("perspective", ""))
         secondary = current.get("perspective_secondary", "")
-        # Map legacy Chinese values to English
+                                              
         legacy_map = {"第一人称": "1st person", "第二人称": "2nd person", "第三人称": "3rd person", "混合": "Mixed", "其他": "Other", "无": "None"}
         primary = legacy_map.get(primary, primary)
         secondary = legacy_map.get(secondary, secondary) if secondary else "None"

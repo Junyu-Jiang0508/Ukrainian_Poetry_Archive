@@ -1,4 +1,4 @@
-"""Compare manual_annotation_result.csv to GPT (detailed or test); write metrics and error CSV."""
+"""Compare manual_annotation_result.csv to GPT (detailed or test); write metrics and err..."""
 import os
 
 import repo_bootstrap
@@ -10,11 +10,11 @@ from sklearn.metrics import precision_recall_fscore_support
 
 from utils.label_normalization import normalize_person_number_label
 
-MANUAL_FILE = "outputs/01_pronoun_detection/manual_annotation_result.csv"
-GPT_DETAILED_FILE = "outputs/01_pronoun_detection/gpt_annotation_detailed.csv"
-GPT_TEST_FILE = "outputs/01_pronoun_detection/gpt_annotation_test_result.csv"
-ERROR_OUTPUT = "outputs/01_pronoun_detection/validation_error_cases.csv"
-METRICS_OUTPUT = "outputs/01_pronoun_detection/validation_metrics.csv"
+MANUAL_FILE = "outputs/01_annotation_pronoun_detection/manual_annotation_result.csv"
+GPT_DETAILED_FILE = "outputs/01_annotation_pronoun_detection/gpt_annotation_detailed.csv"
+GPT_TEST_FILE = "outputs/01_annotation_pronoun_detection/gpt_annotation_test_result.csv"
+ERROR_OUTPUT = "outputs/01_annotation_pronoun_detection/validation_error_cases.csv"
+METRICS_OUTPUT = "outputs/01_annotation_pronoun_detection/validation_metrics.csv"
 
 
 def _normalize_sent(s: str) -> str:

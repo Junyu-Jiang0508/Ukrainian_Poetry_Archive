@@ -8,7 +8,7 @@ import pandas as pd
 MIN_POEMS_PER_INTERVAL = 30
 INITIAL_MONTHS = 2
 TARGET_POEMS = 50
-# Used by balanced binning: aim for similar poem (and optionally stanza) mass per interval.
+                                                                                           
 TARGET_POEMS_PER_BALANCED_BIN = 200
 
 
@@ -22,23 +22,7 @@ def balanced_temporal_binning(
     weight_col: str | None = None,
     balance_axis: str = "poems",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Time bins with similar poem or stanza counts per bin (chronological, non-overlapping).
-
-    Unlike ``adaptive_binning`` (only merges sparse calendar buckets), this **splits** the
-    timeline into contiguous blocks along poem publication order so counts stay near
-    ``target_poems_per_bin`` (or stanza totals near even splits when ``balance_axis`` is
-    ``\"stanzas\"`` and ``weight_col`` is set).
-
-    Parameters
-    ----------
-    balance_axis
-        ``\"poems\"``: each bin has nearly the same number of distinct poems.
-        ``\"stanzas\"``: each bin has nearly the same sum of ``weight_col`` (e.g. stanzas
-        per poem), with the number of bins still derived from ``target_poems_per_bin``.
-    weight_col
-        Optional numeric column (e.g. stanza counts per poem). Required when
-        ``balance_axis=\"stanzas\"``.
-    """
+    """Time bins with similar poem or stanza counts per bin (chronological, non-overlapping)."""
     min_poems = min_poems or MIN_POEMS_PER_INTERVAL
     tpb = int(target_poems_per_bin or TARGET_POEMS_PER_BALANCED_BIN)
     tpb = max(1, tpb)

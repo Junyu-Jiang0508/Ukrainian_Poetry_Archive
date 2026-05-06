@@ -7,13 +7,13 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-# Matches validator message in 07_gpt_annotation._validate_pronoun_row
+                                                                      
 QA_INCONSISTENT_PRO_DROP_IMPLIED = (
     "INCONSISTENT: is_pro_drop=True but source_mapping missing '(IMPLIED)'"
 )
 
 CORE_TEMPORAL_PERIODS = frozenset({"2014_2021", "post_2022"})
-# Column / legend order for crosstabs and plots (do not sort alphabetically).
+                                                                             
 CORE_TEMPORAL_PERIOD_ORDER: tuple[str, ...] = ("2014_2021", "post_2022")
 
 
@@ -84,14 +84,7 @@ def _reconcile_temporal_period_series(df: pd.DataFrame) -> pd.Series:
 
 
 def add_derived_annotation_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Adds:
-      qa_clean — qa_flag == OK (strict; use for sensitivity vs full sample).
-      qa_inconsistency_pro_drop_metadata — largest benign-looking QA class.
-      explicit_source_mapping — non-empty source_mapping without (IMPLIED) pro-drop tag.
-      temporal_period_reconciled — from year when possible, else original temporal_period.
-      in_core_temporal_analysis — temporal_period_reconciled in {2014_2021, post_2022}.
-    """
+    """Adds: qa_clean — qa_flag == OK (strict; use for sensitivity vs full sample)."""
     out = df.copy()
     if "qa_flag" not in out.columns:
         out["qa_flag"] = ""

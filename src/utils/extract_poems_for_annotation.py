@@ -8,8 +8,8 @@ repo_bootstrap.prepare_repo(__file__)
 
 import pandas as pd
 
-INPUT_FILE = "outputs/01_pronoun_detection/ukrainian_pronouns_projection_final.csv"
-OUTPUT_FILE = "outputs/01_pronoun_detection/poems_for_manual_annotation.csv"
+INPUT_FILE = "outputs/01_annotation_pronoun_detection/ukrainian_pronouns_projection_final.csv"
+OUTPUT_FILE = "outputs/01_annotation_pronoun_detection/poems_for_manual_annotation.csv"
 
 YEAR_BOUNDARY = 2022
 POEMS_PER_GROUP = 10

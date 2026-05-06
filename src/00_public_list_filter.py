@@ -1,16 +1,4 @@
-"""Build the public-list corpus subset of ukrpoetry_database.csv.
-
-Author allow-list from data/raw/author.xlsx (\"Include in public list\" = yes).
-By default keeps all ``Language`` values for those authors, but **drops rows where
-``Original language (if post is a translation)`` is non-empty**, so Ukrainian
-renderings of foreign originals are not double-counted alongside the same poem
-entered as non-translation. Use --include-translation-posts to keep those rows.
-
-Optional --ukrainian-only additionally requires Language=ukrainian.
-
-Writes data/processed/ukrpoetry_database_public_list.csv and, unless --corpus-only,
-filters downstream annotation CSVs to the same poem IDs / authors.
-"""
+"""Build the public-list corpus subset of ukrpoetry_database.csv."""
 from __future__ import annotations
 
 import argparse
@@ -34,9 +22,9 @@ DEFAULT_AUTHOR_XLSX = _DATA_RAW / "author.xlsx"
 DEFAULT_DATABASE_CSV = _DATA_RAW / "ukrpoetry_database.csv"
 DEFAULT_CORPUS_OUT = _DATA_PROCESSED / "ukrpoetry_database_public_list.csv"
 
-PRONOUN_DETAILED = _ROOT / "outputs" / "01_pronoun_detection" / "ukrainian_pronouns_detailed.csv"
-PRONOUN_PROJECTION = _ROOT / "outputs" / "01_pronoun_detection" / "ukrainian_pronouns_projection_final.csv"
-GPT_DETAILED = _ROOT / "outputs" / "01_pronoun_detection" / "gpt_annotation_detailed.csv"
+PRONOUN_DETAILED = _ROOT / "outputs" / "01_annotation_pronoun_detection" / "ukrainian_pronouns_detailed.csv"
+PRONOUN_PROJECTION = _ROOT / "outputs" / "01_annotation_pronoun_detection" / "ukrainian_pronouns_projection_final.csv"
+GPT_DETAILED = _ROOT / "outputs" / "01_annotation_pronoun_detection" / "gpt_annotation_detailed.csv"
 
 AUTHOR_OF_POEM_COL = "Author of poem"
 LANGUAGE_COL = "Language"
@@ -50,11 +38,7 @@ def filter_database_to_public_corpus(
     ukrainian_only: bool = False,
     exclude_translation_posts: bool = True,
 ) -> pd.DataFrame:
-    """Return rows whose author is in ``allowed_authors``.
-
-    When ``exclude_translation_posts`` is True, drop rows with a non-empty
-    ``Original language (if post is a translation)`` (translation duplicates).
-    """
+    """Return rows whose author is in ``allowed_authors``."""
     df = df.copy()
     df.columns = df.columns.str.strip()
     if AUTHOR_OF_POEM_COL not in df.columns:

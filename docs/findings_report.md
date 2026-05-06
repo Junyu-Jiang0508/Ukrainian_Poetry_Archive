@@ -146,7 +146,7 @@ Among 105 authors, 46 are prolific (≥10 poems), and 29 are active across multi
 
 | Script | Output Directory | Key Products |
 |--------|-----------------|-------------|
-| `12_gpt_annotation_exploration.py` | `outputs/12_gpt_annotation_exploration/` | Field distributions, crosstabs, heatmaps |
+| `01_annotation_gpt_exploration.py` | `outputs/01_annotation_gpt_exploration/` | Field distributions, crosstabs, heatmaps |
 | `13_rq1_we_type_analysis.py` | `outputs/13_rq1_we_type/` | Chi-square, z-tests, timeseries, regression |
 | `14_rq2_addressee_analysis.py` | `outputs/14_rq2_addressee/` | Chi-square, z-tests, referent cross-analysis |
 | `15_poem_perspective_analysis.py` | `outputs/15_poem_perspective/` | Perspective distributions, combinations |
