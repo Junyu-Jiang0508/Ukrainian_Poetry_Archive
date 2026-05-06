@@ -23,7 +23,6 @@ DEFAULT_DATABASE_CSV = _DATA_RAW / "ukrpoetry_database.csv"
 DEFAULT_CORPUS_OUT = _DATA_PROCESSED / "ukrpoetry_database_public_list.csv"
 
 PRONOUN_DETAILED = _ROOT / "outputs" / "01_annotation_pronoun_detection" / "ukrainian_pronouns_detailed.csv"
-PRONOUN_PROJECTION = _ROOT / "outputs" / "01_annotation_pronoun_detection" / "ukrainian_pronouns_projection_final.csv"
 GPT_DETAILED = _ROOT / "outputs" / "01_annotation_pronoun_detection" / "gpt_annotation_detailed.csv"
 
 AUTHOR_OF_POEM_COL = "Author of poem"
@@ -113,11 +112,6 @@ def write_derivative_public_lists(id_set: set[str], allowed_authors: set[str]) -
     """Sync pronoun / GPT exports under data/processed/ when source files exist."""
     pairs: list[tuple[Path, Path, str]] = [
         (PRONOUN_DETAILED, _DATA_PROCESSED / "ukrainian_pronouns_detailed_public_list.csv", "ids"),
-        (
-            PRONOUN_PROJECTION,
-            _DATA_PROCESSED / "ukrainian_pronouns_projection_final_public_list.csv",
-            "ids",
-        ),
     ]
     for src, dest, mode in pairs:
         if mode == "ids":
