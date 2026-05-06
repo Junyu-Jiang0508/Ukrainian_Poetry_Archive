@@ -144,13 +144,17 @@ Among 105 authors, 46 are prolific (≥10 poems), and 29 are active across multi
 
 ## 7. Output Inventory
 
+See `src/utils/pipeline_catalog.py` (or run
+`PYTHONPATH=src python src/00_pipeline_orchestrator.py --list`) for the
+authoritative stage list. Per-stage artifacts:
+
 | Script | Output Directory | Key Products |
 |--------|-----------------|-------------|
-| `01_annotation_gpt_exploration.py` | `outputs/01_annotation_gpt_exploration/` | Field distributions, crosstabs, heatmaps |
-| `13_rq1_we_type_analysis.py` | `outputs/13_rq1_we_type/` | Chi-square, z-tests, timeseries, regression |
-| `14_rq2_addressee_analysis.py` | `outputs/14_rq2_addressee/` | Chi-square, z-tests, referent cross-analysis |
-| `15_poem_perspective_analysis.py` | `outputs/15_poem_perspective/` | Perspective distributions, combinations |
-| `16_temporal_cooccurrence.py` | `outputs/16_temporal_cooccurrence/` | PMI tables, heatmaps, bootstrap tests |
-| `17_temporal_network.py` | `outputs/17_temporal_network/` | Network metrics, visualizations, centrality |
-| `18_author_trajectories.py` | `outputs/18_author_trajectories/` | Trajectory CSVs, clusters, small multiples |
-| `19_publication_figures.py` | `outputs/19_publication_figures/` | Figures 1–5 (PNG+PDF), LaTeX tables |
+| `02_modeling_significance_core_contrasts.py` | `outputs/02_modeling_significance_core_contrasts/` | Two-period confirmatory contrasts, sensitivity tables |
+| `02_modeling_q1_per_cell_glm.py` | `outputs/02_modeling_q1_per_cell_glm/` | Per-cell GLM tables (`q1_*.csv`), poem & stanza levels |
+| `02_modeling_q2_hierarchical.py` | `outputs/02_modeling_q2_hierarchical/` | Hierarchical random-slope summaries (`q2_*.csv`) |
+| `02_modeling_significance_models.py` | `outputs/02_modeling_significance_models/` | Inferential model tables for pronoun shifts |
+| `02_modeling_significance_publication_figures.py` | `outputs/02_modeling_significance_publication_figures/` | Publication PNG/PDF figures |
+| `02_modeling_typology_and_period_models.py` | `outputs/02_modeling_typology_and_period_models/` | Typology + period cohort model tables |
+| `03_reporting_descriptive_statistics.py` | `outputs/03_reporting_descriptive_statistics/` | Methodology + corpus overview tables, adaptive intervals |
+| `03_reporting_roster_freeze.py` | `outputs/03_reporting_roster_freeze/` | Frozen author roster + diagnostics |
