@@ -1,4 +1,4 @@
-"""Three-period confirmatory contrasts with author FE and sensitivity battery."""
+"""Two-period confirmatory contrasts with author FE and sensitivity battery."""
 
 from __future__ import annotations
 
@@ -24,12 +24,12 @@ DEFAULT_OUTPUT = ROOT / "outputs" / "02_modeling_significance_core_contrasts"
 DEFAULT_ROSTER = ROOT / "outputs" / "03_reporting_roster_freeze" / "roster_v1_frozen.csv"
 DEFAULT_ROSTER_GE8 = ROOT / "outputs" / "03_reporting_roster_freeze" / "roster_v1_threshold_ge8.csv"
 
-PERIODS = ["P1_2014_18", "P2_2019_21", "P3_2022plus"]
+PERIODS = ["P1_2014_2021", "P2_2022_plus"]
 CELL4 = ["1sg", "1pl", "2sg", "2pl"]
 CELL6 = ["1sg", "1pl", "2sg", "2pl", "3sg", "3pl"]
 QIRIMLI_CODES = {"Qirimli", "Russian, Qirimli", "Ukrainian, Qirimli"}
 SWITCHERS = {"Iya Kiva", "Andrij Bondar", "Alex Averbuch", "Olena Boryshpolets"}
-FORMULA = 'y ~ person * number * C(period3, Treatment("P2_2019_21")) + C(author)'
+FORMULA = 'y ~ person * number * C(period3, Treatment("P1_2014_2021")) + C(author)'
 
 
 def _mode_with_tie_order(series: pd.Series, preference: list[str]) -> str:
@@ -138,7 +138,7 @@ def _build_contrast_specs(names: list[str]) -> list[tuple[str, np.ndarray]]:
     vec = {n: i for i, n in enumerate(names)}
 
     def _term(period: str, suffix: str = "") -> str:
-        base = f'C(period3, Treatment("P2_2019_21"))[T.{period}]'
+        base = f'C(period3, Treatment("P1_2014_2021"))[T.{period}]'
         return base if not suffix else f"{suffix}:{base}"
 
     def _v(weights: dict[str, float]) -> np.ndarray:
@@ -149,12 +149,9 @@ def _build_contrast_specs(names: list[str]) -> list[tuple[str, np.ndarray]]:
         return v
 
     tests = [
-        ("P3_vs_P2_2sg_cell_shift", _v({_term("P3_2022plus"): 1.0, _term("P3_2022plus", "person"): 1.0})),
-        ("P3_vs_P2_1pl_cell_shift", _v({_term("P3_2022plus"): 1.0, _term("P3_2022plus", "number"): 1.0})),
-        ("P3_vs_P2_person_x_number", _v({_term("P3_2022plus", "person:number"): 1.0})),
-        ("P1_vs_P2_2sg_cell_shift", _v({_term("P1_2014_18"): 1.0, _term("P1_2014_18", "person"): 1.0})),
-        ("P1_vs_P2_1pl_cell_shift", _v({_term("P1_2014_18"): 1.0, _term("P1_2014_18", "number"): 1.0})),
-        ("P1_vs_P2_person_x_number", _v({_term("P1_2014_18", "person:number"): 1.0})),
+        ("P2_vs_P1_2sg_cell_shift", _v({_term("P2_2022_plus"): 1.0, _term("P2_2022_plus", "person"): 1.0})),
+        ("P2_vs_P1_1pl_cell_shift", _v({_term("P2_2022_plus"): 1.0, _term("P2_2022_plus", "number"): 1.0})),
+        ("P2_vs_P1_person_x_number", _v({_term("P2_2022_plus", "person:number"): 1.0})),
     ]
     return tests
 
@@ -268,7 +265,7 @@ def build_per_author_contrasts(long_df: pd.DataFrame) -> pd.DataFrame:
             continue
         try:
             fit = smf.glm(
-                'y ~ person * number * C(period3, Treatment("P2_2019_21"))',
+                'y ~ person * number * C(period3, Treatment("P1_2014_2021"))',
                 data=ad,
                 family=sm.families.Binomial(),
                 freq_weights=ad["n"],
@@ -276,7 +273,7 @@ def build_per_author_contrasts(long_df: pd.DataFrame) -> pd.DataFrame:
         except Exception:
             continue
         cdf = evaluate_contrasts(fit, ad)
-        for cname in ("P3_vs_P2_1pl_cell_shift", "P3_vs_P2_2sg_cell_shift"):
+        for cname in ("P2_vs_P1_1pl_cell_shift", "P2_vs_P1_2sg_cell_shift"):
             rr = cdf[cdf["contrast"].eq(cname)]
             if rr.empty:
                 continue
@@ -320,7 +317,7 @@ def plot_caterpillar(per_author: pd.DataFrame, out_path: Path) -> None:
     if per_author.empty:
         return
     fig, axes = plt.subplots(1, 2, figsize=(12, 6), sharex=False)
-    for i, cname in enumerate(["P3_vs_P2_2sg_cell_shift", "P3_vs_P2_1pl_cell_shift"]):
+    for i, cname in enumerate(["P2_vs_P1_2sg_cell_shift", "P2_vs_P1_1pl_cell_shift"]):
         ax = axes[i]
         d = per_author[per_author["contrast"] == cname].sort_values("estimate_logit")
         y = np.arange(len(d))
@@ -337,7 +334,7 @@ def plot_caterpillar(per_author: pd.DataFrame, out_path: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Three-period confirmatory contrast models.")
+    parser = argparse.ArgumentParser(description="Two-period confirmatory contrast models.")
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--layer0", type=Path, default=DEFAULT_LAYER0)
@@ -346,7 +343,6 @@ def main() -> None:
     parser.add_argument("--min-n12-per-poem", type=int, default=5)
     parser.add_argument("--bootstrap-reps", type=int, default=1999)
     parser.add_argument("--bootstrap-seed", type=int, default=20260505)
-    parser.add_argument("--prereg-commit", type=str, default="")
     args = parser.parse_args()
 
     out = args.output.resolve()
@@ -400,13 +396,11 @@ def main() -> None:
         f.write(f"valid_reps={wb_log['valid_reps']}\n")
 
     with (out / "README.md").open("w", encoding="utf-8") as f:
-        f.write("# Three-period confirmatory model outputs\n\n")
-        if args.prereg_commit:
-            f.write(f"- Preregistration commit hash: `{args.prereg_commit}`\n")
+        f.write("# Two-period confirmatory model outputs\n\n")
         f.write("- Main family includes 6 confirmatory contrasts with BH correction.\n")
         f.write("- Wild cluster bootstrap uses Rademacher weights by author cluster.\n")
 
-    print(f"Wrote three-period outputs to: {out}")
+    print(f"Wrote two-period outputs to: {out}")
 
 
 if __name__ == "__main__":

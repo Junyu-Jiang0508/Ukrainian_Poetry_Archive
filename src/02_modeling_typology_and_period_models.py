@@ -1,4 +1,4 @@
-"""Run prereg v2 cohort model, typology classification, and period visuals."""
+"""Run cohort model, typology classification, and period visuals."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ DEFAULT_LAYER0 = ROOT / "data" / "To_run" / "00_filtering" / "layer0_poems_one_p
 DEFAULT_ROSTER = ROOT / "outputs" / "03_reporting_roster_freeze" / "roster_v1_frozen.csv"
 DEFAULT_OUT = ROOT / "outputs" / "02_modeling_typology_and_period_models"
 
-PERIODS = ["P1_2014_18", "P2_2019_21", "P3_2022plus"]
+PERIODS = ["P1_2014_2021", "P2_2022_plus"]
 CELL4 = ["1sg", "1pl", "2sg", "2pl"]
 SWITCHERS = {"Iya Kiva", "Andrij Bondar", "Alex Averbuch", "Olena Boryshpolets"}
 
@@ -105,7 +105,7 @@ def build_long(df: pd.DataFrame, roster_authors: list[str], min_n12: int = 5) ->
 
 
 def fit_main(long_df: pd.DataFrame):
-    formula = 'y ~ person * number * C(period3, Treatment("P2_2019_21")) + C(author) * person * number + log_n_tokens'
+    formula = 'y ~ person * number * C(period3, Treatment("P1_2014_2021")) + C(author) * person * number + log_n_tokens'
     fit = smf.glm(formula, data=long_df, family=sm.families.Binomial(), freq_weights=long_df["n"]).fit()
     return fit
 
@@ -116,24 +116,24 @@ def per_author_contrasts(long_df: pd.DataFrame) -> pd.DataFrame:
         if g["period3"].nunique() < 2:
             continue
         model = smf.glm(
-            'y ~ person * number * C(period3, Treatment("P2_2019_21")) + log_n_tokens',
+            'y ~ person * number * C(period3, Treatment("P1_2014_2021")) + log_n_tokens',
             data=g,
             family=sm.families.Binomial(),
             freq_weights=g["n"],
         )
         fit = model.fit_regularized(alpha=1e-4, L1_wt=0.0)
         p = fit.params.to_dict()
-        t_p3 = 'C(period3, Treatment("P2_2019_21"))[T.P3_2022plus]'
-        e_2sg = p.get(t_p3, 0.0) + p.get(f"person:{t_p3}", 0.0)
-        e_1pl = p.get(t_p3, 0.0) + p.get(f"number:{t_p3}", 0.0)
-        rows.append({"author": author, "contrast": "P3_vs_P2_2sg_cell_shift", "estimate_logit": e_2sg})
-        rows.append({"author": author, "contrast": "P3_vs_P2_1pl_cell_shift", "estimate_logit": e_1pl})
+        t_p2 = 'C(period3, Treatment("P1_2014_2021"))[T.P2_2022_plus]'
+        e_2sg = p.get(t_p2, 0.0) + p.get(f"person:{t_p2}", 0.0)
+        e_1pl = p.get(t_p2, 0.0) + p.get(f"number:{t_p2}", 0.0)
+        rows.append({"author": author, "contrast": "P2_vs_P1_2sg_cell_shift", "estimate_logit": e_2sg})
+        rows.append({"author": author, "contrast": "P2_vs_P1_1pl_cell_shift", "estimate_logit": e_1pl})
     return pd.DataFrame(rows)
 
 
 def classify_typology(per_author: pd.DataFrame) -> pd.DataFrame:
     piv = per_author.pivot(index="author", columns="contrast", values="estimate_logit").reset_index()
-    for c in ["P3_vs_P2_2sg_cell_shift", "P3_vs_P2_1pl_cell_shift"]:
+    for c in ["P2_vs_P1_2sg_cell_shift", "P2_vs_P1_1pl_cell_shift"]:
         med = float(piv[c].median())
         sd = float(piv[c].std(ddof=0))
         piv[f"{c}_median"] = med
@@ -142,13 +142,13 @@ def classify_typology(per_author: pd.DataFrame) -> pd.DataFrame:
         sign_m = np.sign(med)
         piv[f"{c}_direction_discordant"] = (sign_a != sign_m) & (sign_a != 0) & (sign_m != 0)
         piv[f"{c}_extreme_same_direction"] = (~piv[f"{c}_direction_discordant"]) & ((piv[c] - med).abs() >= (1.5 * sd))
-    piv["is_atypical_core"] = piv["P3_vs_P2_2sg_cell_shift_direction_discordant"] & piv["P3_vs_P2_1pl_cell_shift_direction_discordant"]
-    piv["is_atypical_broad"] = piv["P3_vs_P2_2sg_cell_shift_direction_discordant"] | piv["P3_vs_P2_1pl_cell_shift_direction_discordant"]
-    piv["is_extreme_same_direction"] = piv["P3_vs_P2_2sg_cell_shift_extreme_same_direction"] | piv["P3_vs_P2_1pl_cell_shift_extreme_same_direction"]
+    piv["is_atypical_core"] = piv["P2_vs_P1_2sg_cell_shift_direction_discordant"] & piv["P2_vs_P1_1pl_cell_shift_direction_discordant"]
+    piv["is_atypical_broad"] = piv["P2_vs_P1_2sg_cell_shift_direction_discordant"] | piv["P2_vs_P1_1pl_cell_shift_direction_discordant"]
+    piv["is_extreme_same_direction"] = piv["P2_vs_P1_2sg_cell_shift_extreme_same_direction"] | piv["P2_vs_P1_1pl_cell_shift_extreme_same_direction"]
 
     def _type(row):
-        e2 = float(row["P3_vs_P2_2sg_cell_shift"])
-        e1 = float(row["P3_vs_P2_1pl_cell_shift"])
+        e2 = float(row["P2_vs_P1_2sg_cell_shift"])
+        e1 = float(row["P2_vs_P1_1pl_cell_shift"])
         if e2 > 0 and e1 <= 0:
             return "Type C: accusatory 2sg turn"
         if e1 > 0 and e2 <= 0:
@@ -158,7 +158,7 @@ def classify_typology(per_author: pd.DataFrame) -> pd.DataFrame:
         return "Type D: introspective 1sg turn"
 
     piv["typology_class"] = piv.apply(_type, axis=1)
-    piv["exploratory_mixed_profile"] = (piv["P3_vs_P2_1pl_cell_shift"] > 0) & (piv["P3_vs_P2_2sg_cell_shift"] > 0)
+    piv["exploratory_mixed_profile"] = (piv["P2_vs_P1_1pl_cell_shift"] > 0) & (piv["P2_vs_P1_2sg_cell_shift"] > 0)
     piv["notes"] = np.where(piv["author"].isin(list(SWITCHERS)), "bilingual_switcher", "")
     return piv.sort_values(["is_atypical_core", "is_atypical_broad", "author"], ascending=[False, False, True]).reset_index(drop=True)
 
@@ -166,22 +166,22 @@ def classify_typology(per_author: pd.DataFrame) -> pd.DataFrame:
 def sample_close_reading(df: pd.DataFrame, typ: pd.DataFrame, seed: int = 20260505) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     core = typ.loc[typ["is_atypical_core"], "author"].astype(str).tolist()
-    broad = typ.loc[typ["is_atypical_broad"] & ~typ["author"].isin(core), ["author", "P3_vs_P2_1pl_cell_shift", "P3_vs_P2_2sg_cell_shift"]].copy()
-    broad["gap"] = broad["P3_vs_P2_1pl_cell_shift"].abs() + broad["P3_vs_P2_2sg_cell_shift"].abs()
+    broad = typ.loc[typ["is_atypical_broad"] & ~typ["author"].isin(core), ["author", "P2_vs_P1_1pl_cell_shift", "P2_vs_P1_2sg_cell_shift"]].copy()
+    broad["gap"] = broad["P2_vs_P1_1pl_cell_shift"].abs() + broad["P2_vs_P1_2sg_cell_shift"].abs()
     secondary = broad.sort_values("gap", ascending=False)["author"].astype(str).tolist()[:1]
     extreme = (
         typ.loc[
             typ["is_extreme_same_direction"] & ~typ["author"].isin(core + secondary),
-            ["author", "P3_vs_P2_1pl_cell_shift", "P3_vs_P2_2sg_cell_shift"],
+            ["author", "P2_vs_P1_1pl_cell_shift", "P2_vs_P1_2sg_cell_shift"],
         ]
-        .assign(gap=lambda x: x["P3_vs_P2_1pl_cell_shift"].abs() + x["P3_vs_P2_2sg_cell_shift"].abs())
+        .assign(gap=lambda x: x["P2_vs_P1_1pl_cell_shift"].abs() + x["P2_vs_P1_2sg_cell_shift"].abs())
         .sort_values("gap", ascending=False)["author"]
         .astype(str)
         .tolist()[:1]
     )
     target = core + secondary + extreme
     poem_meta = (
-        df[df["period3"].eq("P3_2022plus") & df["author"].isin(target)]
+        df[df["period3"].eq("P2_2022_plus") & df["author"].isin(target)]
         .groupby("poem_id", as_index=False)
         .agg(author=("author", "first"), year_int=("year_int", "first"))
     )
@@ -201,8 +201,11 @@ def plot_period_panels(long_df: pd.DataFrame, typ: pd.DataFrame, out_pdf: Path) 
     atyp_core = set(typ.loc[typ["is_atypical_core"], "author"].astype(str))
     atyp_broad = set(typ.loc[typ["is_atypical_broad"], "author"].astype(str))
     authors = sorted(d["author"].unique().tolist())
-    fig, axes = plt.subplots(4, 3, figsize=(15, 16), sharex=True, sharey=True)
-    axes = axes.flatten()
+    n = len(authors)
+    ncols = 3
+    nrows = max(1, (n + ncols - 1) // ncols)
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(15, 4.0 * nrows), sharex=True, sharey=True)
+    axes = axes.flatten() if hasattr(axes, "flatten") else [axes]
     colors = {"1sg": "#1f77b4", "1pl": "#ff7f0e", "2sg": "#2ca02c", "2pl": "#d62728"}
     xmap = {p: i for i, p in enumerate(PERIODS)}
     for i, author in enumerate(authors):
@@ -212,8 +215,8 @@ def plot_period_panels(long_df: pd.DataFrame, typ: pd.DataFrame, out_pdf: Path) 
             cd = ad[ad["cell"].eq(c)]
             xs = [xmap[p] for p in cd["period3"]]
             ax.plot(xs, cd["y"], marker="o", linewidth=1.8, label=c, color=colors[c])
-        ax.set_xticks([0, 1, 2])
-        ax.set_xticklabels(["P1", "P2", "P3"])
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels(["P1", "P2"])
         ax.set_ylim(0, 1)
         mark = "**" if author in atyp_core else ("*" if author in atyp_broad else "")
         color = "darkred" if author in atyp_core else ("darkorange" if author in atyp_broad else "black")
@@ -224,7 +227,7 @@ def plot_period_panels(long_df: pd.DataFrame, typ: pd.DataFrame, out_pdf: Path) 
         axes[j].axis("off")
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=4, frameon=False)
-    fig.suptitle("Period-based per-author cell proportions (P1/P2/P3)", fontsize=13)
+    fig.suptitle("Period-based per-author cell proportions (P1/P2)", fontsize=13)
     fig.tight_layout(rect=[0, 0.04, 1, 0.97])
     fig.savefig(out_pdf)
     plt.close(fig)
@@ -239,8 +242,8 @@ def plot_cohort_period_profile(long_df: pd.DataFrame, out_pdf: Path) -> None:
         cd = d[d["cell"].eq(c)]
         xs = [xmap[p] for p in cd["period3"]]
         ax.plot(xs, cd["y"], marker="o", linewidth=2.0, markersize=5, label=c, color=colors[c])
-    ax.set_xticks([0, 1, 2])
-    ax.set_xticklabels(["P1", "P2", "P3"])
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(["P1", "P2"])
     ax.set_ylim(0, 1)
     ax.set_ylabel("Mean per-poem proportion")
     ax.set_title("Cohort-level pronoun profile by period (9-author roster)")
@@ -255,21 +258,21 @@ def plot_per_author_deltas(per_author: pd.DataFrame, out_pdf: Path) -> None:
     piv = per_author.pivot(index="author", columns="contrast", values="estimate_logit").reset_index()
     piv = piv.rename(
         columns={
-            "P3_vs_P2_1pl_cell_shift": "delta_1pl",
-            "P3_vs_P2_2sg_cell_shift": "delta_2sg",
+            "P2_vs_P1_1pl_cell_shift": "delta_1pl",
+            "P2_vs_P1_2sg_cell_shift": "delta_2sg",
         }
     )
     piv = piv.sort_values("delta_1pl")
     y = np.arange(len(piv))
     fig, ax = plt.subplots(figsize=(9, 6))
-    ax.scatter(piv["delta_1pl"], y, color="#ff7f0e", label="1pl (P3-P2)", s=50)
-    ax.scatter(piv["delta_2sg"], y, color="#2ca02c", label="2sg (P3-P2)", s=50)
+    ax.scatter(piv["delta_1pl"], y, color="#ff7f0e", label="1pl (P2-P1)", s=50)
+    ax.scatter(piv["delta_2sg"], y, color="#2ca02c", label="2sg (P2-P1)", s=50)
     for i in range(len(piv)):
         ax.plot([piv["delta_1pl"].iloc[i], piv["delta_2sg"].iloc[i]], [y[i], y[i]], color="#cccccc", linewidth=1)
     ax.axvline(0, color="black", linestyle="--", linewidth=1)
     ax.set_yticks(y)
     ax.set_yticklabels(piv["author"])
-    ax.set_xlabel("Per-author logit shift (P3 vs P2)")
+    ax.set_xlabel("Per-author logit shift (P2 vs P1)")
     ax.set_title("Per-author pronoun shift deltas")
     ax.legend(frameon=False)
     fig.tight_layout()
@@ -321,9 +324,9 @@ def main() -> None:
         f.write("# Prereg v2 outputs\n\n")
         f.write("- Cohort-level within-author model with `log_n_tokens` covariate.\n")
         f.write("- Typology separates direction-discordant atypicality from extreme same-direction intensity.\n")
-        f.write("- Qualitative sample prioritizes atypical-core, with fixed seed random selection in P3.\n")
+        f.write("- Qualitative sample prioritizes atypical-core, with fixed seed random selection in P2.\n")
 
-    print(f"Wrote prereg v2 outputs to: {out}")
+    print(f"Wrote typology and period-model outputs to: {out}")
 
 
 if __name__ == "__main__":

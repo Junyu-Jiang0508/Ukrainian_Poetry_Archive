@@ -1,4 +1,4 @@
-"""Freeze author roster and preregistration artifacts for stage 15."""
+"""Freeze author roster outputs for stage 15."""
 
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ DEFAULT_PER_POEM = ROOT / "outputs" / "03_reporting_descriptive_statistics" / "C
 DEFAULT_PRONOUN = ROOT / "data" / "Annotated_GPT_rerun" / "pronoun_annotation.csv"
 DEFAULT_LAYER0 = ROOT / "data" / "To_run" / "00_filtering" / "layer0_poems_one_per_row.csv"
 DEFAULT_OUT = ROOT / "outputs" / "03_reporting_roster_freeze"
-DEFAULT_PREREG = ROOT / "preregistration" / "contrasts_v1.md"
 
 PERIOD_ORDER = ["P1_2014_2021", "P2_2022_plus"]
 SWITCHERS = {"Iya Kiva", "Olena Boryshpolets", "Alex Averbuch", "Andrij Bondar"}
@@ -265,34 +264,12 @@ def write_decisions_md(out_dir: Path, roster: pd.DataFrame, bondar_spot: pd.Data
     (out_dir / "roster_decisions.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def write_prereg(path: Path) -> None:
-    today = date.today().isoformat()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = f"""# Confirmatory Contrasts v1
-
-Signed date: {today}
-
-Primary inferential family is fixed before model rerun:
-
-1. P3 vs P2: person main contrast.
-2. P3 vs P2: number main contrast.
-3. P3 vs P2: person x number interaction contrast.
-4. P1 vs P2: person x number interaction contrast.
-
-Notes:
-- These contrasts are confirmatory; multiplicity control is applied within this family.
-- Sensitivity analyses are pre-specified separately: (a) remove four switchers, (b) remove Iya Kiva only, (c) leave-one-author-out across the frozen roster.
-"""
-    path.write_text(text, encoding="utf-8")
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description="Freeze roster outputs for stage 15.")
     ap.add_argument("--per-poem", type=Path, default=DEFAULT_PER_POEM)
     ap.add_argument("--pronoun", type=Path, default=DEFAULT_PRONOUN)
     ap.add_argument("--layer0", type=Path, default=DEFAULT_LAYER0)
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    ap.add_argument("--prereg", type=Path, default=DEFAULT_PREREG)
     args = ap.parse_args()
 
     out = args.out.resolve()
@@ -302,10 +279,7 @@ def main() -> None:
     bondar_spot = build_bondar_spotcheck(args.layer0.resolve(), args.per_poem.resolve(), sample_n=5)
     write_decisions_md(out, roster, bondar_spot)
     plot_author_trajectories(args.pronoun.resolve(), args.layer0.resolve(), roster, out / "diagnostic_per_author_trajectories.pdf")
-    write_prereg(args.prereg.resolve())
-
     print(f"Wrote roster freeze outputs to: {out}")
-    print(f"Wrote preregistration contrasts to: {args.prereg.resolve()}")
 
 
 if __name__ == "__main__":

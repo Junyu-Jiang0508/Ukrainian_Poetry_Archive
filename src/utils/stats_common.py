@@ -27,12 +27,10 @@ def period_three_way(y) -> str:
     if pd.isna(y):
         return "unknown"
     yy = int(y)
-    if 2014 <= yy <= 2018:
-        return "P1_2014_18"
-    if 2019 <= yy <= 2021:
-        return "P2_2019_21"
+    if 2014 <= yy <= 2021:
+        return "P1_2014_2021"
     if yy >= 2022:
-        return "P3_2022plus"
+        return "P2_2022_plus"
     return "unknown"
 
 

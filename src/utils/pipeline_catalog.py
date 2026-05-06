@@ -36,7 +36,7 @@ def build_pipeline_catalog() -> list[PipelineStage]:
         ("02c", src / "02_modeling_pronoun_projection.py", "Cross-lingual Projection", "Projection-based pronoun alignment."),
         ("02d", src / "02_modeling_adaptive_binning.py", "Adaptive Binning", "Temporal adaptive interval construction."),
         ("02e", src / "02_modeling_breakpoint_regression.py", "Breakpoint Regression", "Interrupted trend and changepoint analysis."),
-        ("02f", src / "02_modeling_significance_core_contrasts.py", "Core Contrasts", "Three-period confirmatory contrasts and sensitivity."),
+        ("02f", src / "02_modeling_significance_core_contrasts.py", "Core Contrasts", "Two-period confirmatory contrasts and sensitivity."),
         ("02g", src / "02_modeling_significance_models.py", "Significance Models", "Model-based inference for pronoun shifts."),
         ("02h", src / "02_modeling_significance_publication_figures.py", "Significance Figures", "Publication figures for inferential outputs."),
         ("02i", src / "02_modeling_typology_and_period_models.py", "Typology + Period Models", "Typology and period-based cohort models."),
