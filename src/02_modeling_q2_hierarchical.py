@@ -1,35 +1,33 @@
-"""Q2: author-level alignment/divergence via hierarchical binomial models.
+"""Q2: author-level alignment/divergence via hierarchical count models.
 
-First/second-person cells only ({1sg,1pl,2sg,2pl}); poem-level counts; denominator
-per poem is the sum of those four cells (third person excluded).
-
-Per cell and language stratum (pooled Ukrainian∪Russian, Ukrainian-only,
-Russian-only), fit:
-    p(k, n_total) ~ period_post + (1 + period_post | author)
-
-Uses Bambi / formulae binomial syntax ``p(successes, trials)`` (not ``k | trials(n)``,
-which formulae 0.6+ parses incorrectly).
-
-The author-specific random slope for `period_post` is interpreted as each
-author's deviation from the population shift (positive = above-trend adaptation,
-negative = counter-trend).
+Five primary cells with poem-level counts and negative-binomial likelihood; offset via
+log(exposure_n_stanzas). Random slope on ``period_post`` when sampling succeeds.
 """
 
 from __future__ import annotations
 
 import argparse
+import logging
+import warnings
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from utils.language_strata import LANGUAGE_STRATA, filter_poems_by_language_stratum
-from utils.pronoun_encoding import pronoun_class_sixway_column
+from utils.language_strata import (
+    LANGUAGE_STRATA,
+    filter_annotation_for_inference_language,
+    filter_poems_by_language_stratum,
+)
+from utils.poem_cell_counts import build_poem_cell_table_with_exposure
+from utils.pronoun_encoding import PRIMARY_GLM_CELLS_BAYESIAN, pronoun_class_sixway_column
 from utils.stats_common import normalize_bool_flag, period_three_way
 from utils.workspace import prepare_analysis_environment
 
 ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
+
+log = logging.getLogger(__name__)
 
 DEFAULT_INPUT = ROOT / "data" / "Annotated_GPT_rerun" / "pronoun_annotation.csv"
 DEFAULT_LAYER0 = ROOT / "data" / "To_run" / "00_filtering" / "layer0_poems_one_per_row.csv"
@@ -39,8 +37,6 @@ DEFAULT_OUTPUT = ROOT / "outputs" / "02_modeling_q2_hierarchical"
 PERIOD_P1 = "P1_2014_2021"
 PERIOD_P2 = "P2_2022_plus"
 PERIODS = [PERIOD_P1, PERIOD_P2]
-CELL12 = ["1sg", "1pl", "2sg", "2pl"]
-QIRIMLI_CODES = {"Qirimli", "Russian, Qirimli", "Ukrainian, Qirimli"}
 
 
 def load_roster_authors(roster_path: Path | None) -> set[str] | None:
@@ -52,7 +48,12 @@ def load_roster_authors(roster_path: Path | None) -> set[str] | None:
     return set(r.loc[r["included"].astype(bool), "author"].astype(str).tolist())
 
 
-def load_and_filter(path: Path, layer0_path: Path | None) -> pd.DataFrame:
+def load_and_filter(
+    path: Path,
+    layer0_path: Path | None,
+    *,
+    language_audit_dir: Path | None = None,
+) -> pd.DataFrame:
     df = pd.read_csv(path, low_memory=False, on_bad_lines="skip")
     df["poem_id"] = df["poem_id"].astype(str).str.strip()
     df["year_int"] = pd.to_numeric(df["year"], errors="coerce").astype("Int64")
@@ -86,31 +87,8 @@ def load_and_filter(path: Path, layer0_path: Path | None) -> pd.DataFrame:
         df = df.assign(is_repeat=False, is_translation=False)
 
     out = df.loc[~(df["is_repeat"] | df["is_translation"])].copy()
-    out = out[~out["language_clean"].isin(QIRIMLI_CODES)].copy()
-    out = out[out["person_number"].isin(CELL12)].copy()
+    out, _ = filter_annotation_for_inference_language(out, audit_dir=language_audit_dir)
     return out
-
-
-def build_poem_cell_table(df: pd.DataFrame) -> pd.DataFrame:
-    counts = (
-        df.groupby(["poem_id", "person_number"], dropna=False)
-        .size()
-        .unstack(fill_value=0)
-        .reset_index()
-    )
-    for cell in CELL12:
-        if cell not in counts.columns:
-            counts[cell] = 0
-    counts = counts[["poem_id"] + CELL12]
-    counts["n_total"] = counts[CELL12].sum(axis=1).astype(int)
-
-    meta = (
-        df.groupby("poem_id", as_index=False)
-        .agg(author=("author", "first"), language_clean=("language_clean", "first"), year_int=("year_int", "first"))
-        .copy()
-    )
-    meta["period3"] = meta["year_int"].map(period_three_way)
-    return counts.merge(meta, on="poem_id", how="left")
 
 
 def _detect_random_slope_var(posterior, term: str, group: str) -> str:
@@ -128,6 +106,38 @@ def _author_dim_name(da) -> str:
     raise KeyError("Could not detect author coordinate dimension.")
 
 
+def _run_bambi_nb(
+    cdf: pd.DataFrame,
+    *,
+    random_slope: bool,
+    draws: int,
+    tune: int,
+    chains: int,
+    cores: int,
+    target_accept: float,
+    random_seed: int,
+):
+    import bambi as bmb
+
+    if random_slope:
+        formula = "k ~ period_post + offset(log_exposure) + (1 + period_post | author)"
+    else:
+        formula = "k ~ period_post + offset(log_exposure) + (1 | author)"
+
+    model = bmb.Model(formula, data=cdf, family="negativebinomial")
+    if random_slope:
+        prior_slope = bmb.Prior("Normal", mu=0.0, sigma=bmb.Prior("HalfNormal", sigma=1.0))
+        model.set_priors(priors={"period_post|author": prior_slope})
+    return model.fit(
+        draws=int(draws),
+        tune=int(tune),
+        chains=int(chains),
+        cores=int(cores),
+        target_accept=float(target_accept),
+        random_seed=int(random_seed),
+    )
+
+
 def fit_hierarchical_per_cell(
     poem_cell: pd.DataFrame,
     roster_authors: set[str] | None,
@@ -140,44 +150,87 @@ def fit_hierarchical_per_cell(
     *,
     language_stratum: str,
     cells: list[str],
+    exposure_type: str = "n_stanzas",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     try:
-        import bambi as bmb
+        import bambi as bmb  # noqa: F401
     except ImportError as exc:
         raise ImportError(
             "Bambi is required for Q2 hierarchical modeling. Install with `pip install bambi`."
         ) from exc
 
+    if exposure_type == "n_stanzas":
+        ex_col = "exposure_n_stanzas"
+    else:
+        ex_col = "exposure_n_tokens"
+
     dat = poem_cell.copy()
+    if "include_in_offset_models" in dat.columns:
+        dat = dat.loc[dat["include_in_offset_models"].astype(bool)].copy()
     dat = dat[dat["period3"].isin(PERIODS)]
-    dat = dat[dat["n_total"] > 0]
     if roster_authors is not None:
         dat = dat[dat["author"].astype(str).isin(roster_authors)]
     dat["period_post"] = (dat["period3"] == PERIOD_P2).astype(int)
     dat["author"] = dat["author"].astype(str)
     dat = dat[dat["author"].str.strip().ne("")]
 
-    fixed_rows: list[dict] = []
-    author_rows: list[dict] = []
+    fixed_rows: list[dict[str, object]] = []
+    author_rows: list[dict[str, object]] = []
 
     for cell in cells:
         cdf = dat.copy()
         cdf["k"] = cdf[cell].astype(int)
-        if cdf["period_post"].nunique() < 2 or cdf["author"].nunique() < 2 or cdf["k"].nunique() < 2:
+        cdf["_ex"] = cdf[ex_col].astype(float)
+        cdf = cdf[cdf["_ex"].gt(0)].copy()
+        if cdf.empty:
             continue
-        model = bmb.Model(
-            "p(k, n_total) ~ period_post + (1 + period_post | author)",
-            data=cdf,
-            family="binomial",
-        )
-        idata = model.fit(
-            draws=int(draws),
-            tune=int(tune),
-            chains=int(chains),
-            cores=int(cores),
-            target_accept=float(target_accept),
-            random_seed=int(random_seed),
-        )
+        cdf["log_exposure"] = np.log(cdf["_ex"])
+        assert cdf["log_exposure"].notna().all(), f"NaN log_exposure for cell={cell}"
+        assert np.isfinite(cdf["log_exposure"].to_numpy()).all(), f"non-finite log_exposure cell={cell}"
+
+        if cdf["period_post"].nunique() < 2 or cdf["author"].nunique() < 2 or int(cdf["k"].sum()) == 0:
+            continue
+
+        idata = None
+        used_slope = False
+        try:
+            idata = _run_bambi_nb(
+                cdf,
+                random_slope=True,
+                draws=draws,
+                tune=tune,
+                chains=chains,
+                cores=cores,
+                target_accept=target_accept,
+                random_seed=random_seed,
+            )
+            used_slope = True
+        except Exception as exc:
+            warnings.warn(
+                f"Q2 NB random-slope failed for cell={cell!r} stratum={language_stratum!r} "
+                f"({type(exc).__name__}: {exc}); falling back to random intercept.",
+                stacklevel=1,
+            )
+            try:
+                idata = _run_bambi_nb(
+                    cdf,
+                    random_slope=False,
+                    draws=draws,
+                    tune=tune,
+                    chains=chains,
+                    cores=cores,
+                    target_accept=target_accept,
+                    random_seed=random_seed,
+                )
+                used_slope = False
+            except Exception as exc2:
+                warnings.warn(
+                    f"Q2 NB random-intercept fallback failed for cell={cell!r} "
+                    f"stratum={language_stratum!r} ({type(exc2).__name__}: {exc2}). Skipping.",
+                    stacklevel=1,
+                )
+                continue
+
         post = idata.posterior
         if "period_post" not in post.data_vars:
             continue
@@ -189,16 +242,21 @@ def fit_hierarchical_per_cell(
             {
                 "language_stratum": language_stratum,
                 "cell": cell,
+                "model_spec": "random_slope_nb" if used_slope else "random_intercept_nb_fallback",
                 "n_poems": int(len(cdf)),
                 "n_authors": int(cdf["author"].nunique()),
-                "population_shift_mean_log_odds": fixed_mean,
+                "population_shift_mean_log_mu": fixed_mean,
                 "population_shift_hdi95_low": fixed_low,
                 "population_shift_hdi95_high": fixed_high,
-                "population_shift_or_mean": float(np.exp(fixed_mean)),
-                "population_shift_or_hdi95_low": float(np.exp(fixed_low)),
-                "population_shift_or_hdi95_high": float(np.exp(fixed_high)),
+                "population_shift_rate_ratio_mean": float(np.exp(fixed_mean)),
+                "population_shift_rate_ratio_hdi95_low": float(np.exp(fixed_low)),
+                "population_shift_rate_ratio_hdi95_high": float(np.exp(fixed_high)),
+                "exposure_type": exposure_type,
             }
         )
+
+        if not used_slope:
+            continue
 
         rs_var = _detect_random_slope_var(post, term="period_post", group="author")
         rs = post[rs_var]
@@ -219,15 +277,16 @@ def fit_hierarchical_per_cell(
                     "language_stratum": language_stratum,
                     "cell": cell,
                     "author": str(author_label),
-                    "author_period_shift_deviation_mean_log_odds": dev_mean,
+                    "author_period_shift_deviation_mean_log_mu": dev_mean,
                     "author_period_shift_deviation_hdi95_low": dev_low,
                     "author_period_shift_deviation_hdi95_high": dev_high,
-                    "author_total_period_shift_mean_log_odds": total_mean,
+                    "author_total_period_shift_mean_log_mu": total_mean,
                     "author_total_period_shift_hdi95_low": total_low,
                     "author_total_period_shift_hdi95_high": total_high,
-                    "author_total_period_shift_or_mean": float(np.exp(total_mean)),
-                    "author_total_period_shift_or_hdi95_low": float(np.exp(total_low)),
-                    "author_total_period_shift_or_hdi95_high": float(np.exp(total_high)),
+                    "author_total_period_shift_rate_ratio_mean": float(np.exp(total_mean)),
+                    "author_total_period_shift_rate_ratio_hdi95_low": float(np.exp(total_low)),
+                    "author_total_period_shift_rate_ratio_hdi95_high": float(np.exp(total_high)),
+                    "exposure_type": exposure_type,
                 }
             )
 
@@ -246,7 +305,7 @@ def plot_author_random_slope_caterpillar(
     need = (
         "cell",
         "author",
-        "author_period_shift_deviation_mean_log_odds",
+        "author_period_shift_deviation_mean_log_mu",
         "author_period_shift_deviation_hdi95_low",
         "author_period_shift_deviation_hdi95_high",
     )
@@ -275,18 +334,18 @@ def plot_author_random_slope_caterpillar(
     axes_flat = np.asarray(axes).ravel()
 
     xlabel_long = (
-        "Posterior mean deviation (log-odds): author random slope on period_post\n"
-        "relative to population mean in this cell (0 = average author)"
+        "Posterior mean deviation on log(scale): random slope on period_post\n"
+        "relative to population mean in this cell (0 ≈ typical author trajectory)"
     )
 
     for i, cell in enumerate(cells_present):
         ax = axes_flat[i]
-        d = author_df.loc[author_df["cell"].eq(cell)].copy()
-        d = d.sort_values("author_period_shift_deviation_mean_log_odds", ascending=True)
-        y = np.arange(len(d))
-        xm = d["author_period_shift_deviation_mean_log_odds"].to_numpy(dtype=float)
-        lo = d["author_period_shift_deviation_hdi95_low"].to_numpy(dtype=float)
-        hi = d["author_period_shift_deviation_hdi95_high"].to_numpy(dtype=float)
+        d_sub = author_df.loc[author_df["cell"].eq(cell)].copy()
+        d_sub = d_sub.sort_values("author_period_shift_deviation_mean_log_mu", ascending=True)
+        y = np.arange(len(d_sub))
+        xm = d_sub["author_period_shift_deviation_mean_log_mu"].to_numpy(dtype=float)
+        lo = d_sub["author_period_shift_deviation_hdi95_low"].to_numpy(dtype=float)
+        hi = d_sub["author_period_shift_deviation_hdi95_high"].to_numpy(dtype=float)
 
         ax.axvline(0.0, color="black", linestyle="--", linewidth=1.0, zorder=0)
         ax.hlines(y, lo, hi, color="#4c78a8", alpha=0.88, linewidth=1.6, zorder=1)
@@ -296,7 +355,7 @@ def plot_author_random_slope_caterpillar(
         ax.set_yticks(y)
         n_y = len(y)
         ylab_fs = max(6.6, min(9.3, 9.9 - 0.055 * max(0.0, n_y - 10.0)))
-        ax.set_yticklabels(d["author"].astype(str), fontsize=ylab_fs)
+        ax.set_yticklabels(d_sub["author"].astype(str), fontsize=ylab_fs)
 
         merged = np.concatenate([xm, lo, hi])
         merged = merged[np.isfinite(merged)]
@@ -321,6 +380,8 @@ def plot_author_random_slope_caterpillar(
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
     parser = argparse.ArgumentParser(description="Q2 hierarchical random-slope model per pronoun cell.")
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--layer0", type=Path, default=DEFAULT_LAYER0)
@@ -330,13 +391,19 @@ def main() -> None:
     parser.add_argument("--tune", type=int, default=2000)
     parser.add_argument("--chains", type=int, default=4)
     parser.add_argument("--cores", type=int, default=4)
-    parser.add_argument("--target-accept", type=float, default=0.9)
+    parser.add_argument("--target-accept", type=float, default=0.95)
     parser.add_argument("--random-seed", type=int, default=20260506)
     parser.add_argument(
         "--strata",
         type=str,
         default=",".join(LANGUAGE_STRATA),
         help=f"Comma-separated subset of: {','.join(LANGUAGE_STRATA)}",
+    )
+    parser.add_argument(
+        "--exposure-type",
+        type=str,
+        default="n_stanzas",
+        choices=("n_stanzas", "n_tokens"),
     )
     parser.add_argument(
         "--skip-caterpillar",
@@ -354,13 +421,19 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     fig_dir = out_dir / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
+    audit_dir = out_dir / "language_stratum_audit"
 
-    filtered = load_and_filter(args.input.resolve(), args.layer0.resolve() if args.layer0 else None)
+    filtered = load_and_filter(
+        args.input.resolve(),
+        args.layer0.resolve() if args.layer0 else None,
+        language_audit_dir=audit_dir,
+    )
     roster_authors = load_roster_authors(args.roster.resolve() if args.roster else None)
-    poem_cell = build_poem_cell_table(filtered)
+    poem_cell = build_poem_cell_table_with_exposure(filtered)
 
     fixed_parts: list[pd.DataFrame] = []
     author_parts: list[pd.DataFrame] = []
+    cell_list = list(PRIMARY_GLM_CELLS_BAYESIAN)
     for i, stratum in enumerate(want_strata):
         sub = filter_poems_by_language_stratum(poem_cell, stratum)
         seed_i = int(args.random_seed) + i * 10_007
@@ -374,7 +447,8 @@ def main() -> None:
             target_accept=args.target_accept,
             random_seed=seed_i,
             language_stratum=stratum,
-            cells=list(CELL12),
+            cells=cell_list,
+            exposure_type=args.exposure_type,
         )
         if not fdf.empty:
             fixed_parts.append(fdf)
@@ -384,7 +458,7 @@ def main() -> None:
             plot_author_random_slope_caterpillar(
                 adf,
                 fig_dir / f"fig_q2_author_random_slope_caterpillar_{stratum}.pdf",
-                cell_order=list(CELL12),
+                cell_order=cell_list,
             )
 
     poem_cell.to_csv(out_dir / "q2_poem_cell_counts_12.csv", index=False)
@@ -394,11 +468,17 @@ def main() -> None:
     author_df.to_csv(out_dir / "q2_author_random_slope_summaries.csv", index=False)
 
     with (out_dir / "README.md").open("w", encoding="utf-8") as f:
-        f.write("# Q2 Hierarchical random-slope outputs (1st/2nd person, poem level)\n\n")
-        f.write("- Cells: `1sg, 1pl, 2sg, 2pl`; `n_total` = sum of those counts in the poem.\n")
-        f.write("- Strata: `pooled_Ukrainian_Russian`, `Ukrainian`, `Russian` (exact poem language).\n")
-        f.write("- Model per stratum × cell: `p(k, n_total) ~ period_post + (1 + period_post | author)`.\n")
-        f.write("- CSVs include column `language_stratum`. Caterpillar: one PDF per stratum under `figures/`.\n")
+        f.write("# Q2 Hierarchical negative-binomial models (1st/2nd person, poem level)\n\n")
+        f.write(
+            "- Primary cells (5-cell, Bayesian): "
+            "`{1sg, 1pl, 2sg, 2pl_vy_polite_singular, 2pl_vy_true_plural}`. The polite-singular "
+            "ви cell is **kept on the Bayesian path** (`PRIMARY_GLM_CELLS_BAYESIAN`) because "
+            "negative-binomial random-slope shrinkage produces meaningful — if wide — HDIs "
+            "even when the cell is sparse. Frequentist Q1/Q1b/Q1c/robustness drop this cell "
+            "(`PRIMARY_GLM_CELLS_FREQUENTIST`) because separation kills MLE.\n"
+        )
+        f.write("- Strata: `pooled_Ukrainian_Russian`, `Ukrainian`, `Russian`.\n")
+        f.write("- Default model: `k ~ period_post + offset(log_exposure) + (1 + period_post | author)` (NB).\n")
 
     print(f"Wrote Q2 outputs to: {out_dir}")
 

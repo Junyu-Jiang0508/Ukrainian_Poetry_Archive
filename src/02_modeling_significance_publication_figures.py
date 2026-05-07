@@ -9,11 +9,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from utils.pronoun_encoding import PRIMARY_GLM_CELLS
 from utils.workspace import prepare_analysis_environment
 
 ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
 DEFAULT_INPUT = ROOT / "outputs" / "02_modeling_significance_models"
 DEFAULT_OUTPUT = ROOT / "outputs" / "02_modeling_significance_models" / "figures"
+
+DEFAULT_Q1_GLM_CSV = ROOT / "outputs" / "02_modeling_q1_per_cell_glm" / "q1_poem_per_cell_glm_by_language.csv"
+DEFAULT_Q1B_FE_CSV = ROOT / "outputs" / "02_modeling_q1b_within_author_fe" / "q1b_within_author_fe_interactions.csv"
 
 FEATURE_LABELS = {
     "prop_1st": "1st person share",
@@ -179,10 +183,103 @@ def plot_segmented_heatmap(df: pd.DataFrame, out_dir: Path) -> None:
     _save(fig, out_dir, "fig4_segmented_heatmap")
 
 
+def plot_q1_per_cell_poisson_rr(df_glm: pd.DataFrame, out_dir: Path) -> None:
+    """PRIMARY_GLM_CELLS × (Ukrainian, Russian); drops pooled stratum rows.
+
+    Number of cells follows the inferential set (currently 4 after polite-singular
+    was excluded for sparsity).
+    """
+    if df_glm.empty:
+        return
+    d = df_glm.copy()
+    d = d.loc[~d["language_stratum"].eq("pooled_Ukrainian_Russian")].copy()
+    if d.empty:
+        return
+    cells = [c for c in PRIMARY_GLM_CELLS if c in set(d["cell"])]
+    if not cells:
+        return
+    strata_l = ("Ukrainian", "Russian")
+    fig, axes = plt.subplots(1, 2, figsize=(10.4, 5.6), sharey=True, squeeze=False)
+    for ax, st in zip(axes.ravel(), strata_l):
+        sub = d.loc[d["language_stratum"].eq(st)]
+        y = np.arange(len(cells))
+        ax.axvline(1.0, color="black", linestyle="--", linewidth=1)
+        for i, cell in enumerate(cells):
+            r = sub.loc[sub["cell"].eq(cell)]
+            if r.empty:
+                continue
+            row = r.iloc[0]
+            xm = float(row["rate_ratio_post_vs_pre"])
+            lo = float(row["rate_ratio_ci95_low"])
+            hi = float(row["rate_ratio_ci95_high"])
+            sig = False
+            if "q_value_bh_within_stratum" in row.index and pd.notna(row["q_value_bh_within_stratum"]):
+                sig = float(row["q_value_bh_within_stratum"]) < 0.05
+            color = "#c0392b" if sig else "#2c3e50"
+            ax.plot([lo, hi], [i, i], color=color, linewidth=2)
+            ax.scatter(xm, i, s=38, color=color, zorder=3)
+        ax.set_yticks(y)
+        ax.set_yticklabels(cells)
+        ax.set_xlabel("Rate ratio (post vs pre, 95% CI)")
+        ax.set_title(st)
+    fig.suptitle("Q1 per-cell Poisson GLM (offset exposure_n_stanzas)", fontsize=12.25, y=1.02)
+    _save(fig, out_dir, "fig5_q1_per_cell_poisson_rr")
+
+
+def plot_q1b_within_author_fe(
+    df_fe: pd.DataFrame,
+    out_dir: Path,
+    *,
+    sort_cell: str = "1pl",
+) -> None:
+    """Forest of author interaction coefficients; red if 95% CI excludes 0 on log scale."""
+    if df_fe.empty:
+        return
+    need = {"language_stratum", "cell", "author", "interaction_coef_log_mu", "ci95_low", "ci95_high"}
+    if need - set(df_fe.columns):
+        return
+    strata_l = ("Ukrainian", "Russian")
+    for st in strata_l:
+        d = df_fe.loc[df_fe["language_stratum"].eq(st) & df_fe["cell"].eq(sort_cell)].copy()
+        if d.empty:
+            continue
+        d = d.sort_values("interaction_coef_log_mu", ascending=True)
+        y = np.arange(len(d))
+        xm = d["interaction_coef_log_mu"].to_numpy(dtype=float)
+        lo = d["ci95_low"].to_numpy(dtype=float)
+        hi = d["ci95_high"].to_numpy(dtype=float)
+        exclude_zero = (lo > 0) | (hi < 0)
+        fig, ax = plt.subplots(figsize=(7.6, max(4.2, 0.28 * len(d) + 1.2)))
+        ax.axvline(0.0, color="black", linestyle="--", linewidth=1)
+        for i in range(len(d)):
+            color = "#c0392b" if exclude_zero[i] else "#2c3e50"
+            ax.plot([lo[i], hi[i]], [i, i], color=color, linewidth=2)
+            ax.scatter(xm[i], i, s=32, color=color, zorder=3)
+        ax.set_yticks(y)
+        fontsize = max(7.0, min(9.0, 11.0 - 0.035 * len(d)))
+        ax.set_yticklabels(d["author"].astype(str).tolist(), fontsize=fontsize)
+        ax.set_xlabel(f"Interaction P2 vs reference (log μ scale), sorted by {sort_cell}")
+        ax.set_title(f"Q1b author × period FE interactions — {st} — cell={sort_cell}")
+        _save(fig, out_dir, f"fig6_q1b_within_author_fe_{st}_{sort_cell}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create publication-style figures for 02_modeling_significance_models.")
     parser.add_argument("--input-dir", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--q1-glm-csv",
+        type=Path,
+        default=None,
+        help=f"Optional Q1 glm CSV (default tries {DEFAULT_Q1_GLM_CSV})",
+    )
+    parser.add_argument(
+        "--q1b-fe-csv",
+        type=Path,
+        default=None,
+        help=f"Optional Q1b FE interactions CSV (default tries {DEFAULT_Q1B_FE_CSV})",
+    )
+    parser.add_argument("--forest-sort-cell", type=str, default="1pl", help="Which cell determines Q1b sort / filter")
     args = parser.parse_args()
 
     in_dir = args.input_dir.resolve()
@@ -201,6 +298,22 @@ def main() -> None:
     plot_poem_by_language(poem_lang, out_dir)
     plot_stanza_models(st_plural, st_pn, out_dir)
     plot_segmented_heatmap(segmented, out_dir)
+
+    q1_path = args.q1_glm_csv
+    if q1_path is None and DEFAULT_Q1_GLM_CSV.is_file():
+        q1_path = DEFAULT_Q1_GLM_CSV
+    if q1_path is not None and Path(q1_path).is_file():
+        plot_q1_per_cell_poisson_rr(pd.read_csv(q1_path, low_memory=False), out_dir)
+
+    q1b_path = args.q1b_fe_csv
+    if q1b_path is None and DEFAULT_Q1B_FE_CSV.is_file():
+        q1b_path = DEFAULT_Q1B_FE_CSV
+    if q1b_path is not None and Path(q1b_path).is_file():
+        plot_q1b_within_author_fe(
+            pd.read_csv(q1b_path, low_memory=False),
+            out_dir,
+            sort_cell=str(args.forest_sort_cell),
+        )
 
     print(f"Wrote publication figures to: {out_dir}")
 

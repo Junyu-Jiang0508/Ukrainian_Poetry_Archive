@@ -15,9 +15,22 @@ This project applies computational methods from corpus linguistics and NLP to an
 
 | # | Question | Stage |
 |---|----------|-------|
-| **RQ1** | How has the referential scope of 1PL *ми* (we) shifted across war phases? | `02b` per-cell GLM (`02_modeling_q1_per_cell_glm.py`) |
+| **RQ1** | How has the referential scope of 1PL *ми* (we) shifted across war phases? | `02b` per-cell GLM (4-cell primary inference, stanza offset) + `02b2` (token offset, sensitivity) |
+| **RQ1b** | Which authors drive any observed shift, and is it robust? | `02bq1b` author×period FE (HC1 + strict per-cell filter) and per-author δ bootstrap forests |
+| **RQ1c** | Did the same peace-time poets change, or did war recruit new entrants? | `02bq1c` GLM restricted to authors with first observed year ≤ 2014 (exploratory; not in main BH family) |
 | **RQ2** | How does author-level heterogeneity modulate the period shift? | `02c` hierarchical random-slope (`02_modeling_q2_hierarchical.py`) |
 | **RQ3** | Are typology- and period-based contrasts robust at corpus and cohort level? | `02a/02d/02f` (significance + typology models) |
+
+**Cell-set split between frequentist and Bayesian paths.** The 5-cell split
+(`{1sg, 1pl, 2sg, 2pl_vy_polite_singular, 2pl_vy_true_plural}`) is collapsed to a
+4-cell `PRIMARY_GLM_CELLS_FREQUENTIST` set `{1sg, 1pl, 2sg, 2pl_vy_true_plural}`
+for all frequentist stages (Q1, Q1b, Q1c, robustness). Polite-singular ви has 23
+events / 18 poems / 13 authors with only 3 authors contributing events in both
+periods — too sparse for MLE-based poem-level inference (separation kills the
+fit). Q2 hierarchical retains the full 5-cell `PRIMARY_GLM_CELLS_BAYESIAN` set
+because negative-binomial random-slope shrinkage produces meaningful (if wide)
+HDIs even at this sparsity. The polite-singular column always remains in
+`q1_poem_unit_cell_counts_12.csv` for future stanza-level work.
 
 All RQ scripts read the canonical stanza-level GPT annotation table:
 `data/Annotated_GPT_rerun/pronoun_annotation.csv`.
@@ -44,8 +57,14 @@ PYTHONPATH=src python src/00_pipeline_orchestrator.py --list
 | 01d | `01_annotation_gpt_annotation.py`            | Stanza-level GPT annotation engine (async) |
 | 01e | `01_annotation_gpt_annotate_full.py`         | Wrapper that runs 01d with `--source public` |
 | 02a | `02_modeling_significance_core_contrasts.py` | Two-period confirmatory contrasts + sensitivity |
-| 02b | `02_modeling_q1_per_cell_glm.py`             | **RQ1**: per-cell one-vs-rest GLM (poem & stanza level) |
-| 02c | `02_modeling_q2_hierarchical.py`             | **RQ2**: per-cell hierarchical random-slope models |
+| 02b | `02_modeling_q1_per_cell_glm.py`             | **RQ1**: per-cell GLM, stanza offset (primary, 4-cell frequentist) |
+| 02b2 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_tokens` | **RQ1 sensitivity**: same script, token offset |
+| 02bq1c | `02_modeling_q1c_pre_invasion_cohort.py`   | **RQ1c**: exploratory pre-invasion cohort GLM (not in main BH family) |
+| 02bq1b | `02_modeling_q1b_within_author_fe.py`      | **RQ1b**: parametric author×period FE (HC1) + per-author δ bootstrap |
+| 02bq3 | `02_modeling_q3_sparse_2pl_aggregated.py`   | Supplementary author×period legacy-2pl aggregation |
+| 02brobp | `02_modeling_robustness_period_definitions.py` | Q1 replicated under alternate period encodings |
+| 02broba | `02_modeling_robustness_author_filter.py` | Q1 replicated under min-poems-per-period thresholds |
+| 02c | `02_modeling_q2_hierarchical.py`             | **RQ2**: hierarchical NB random-slope (5-cell Bayesian; retains polite-singular under shrinkage) |
 | 02d | `02_modeling_significance_models.py`         | Model-based inference for pronoun shifts |
 | 02e | `02_modeling_significance_publication_figures.py` | Publication figures for inferential outputs |
 | 02f | `02_modeling_typology_and_period_models.py`  | Typology + period cohort models |

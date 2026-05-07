@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     for stage in run_list:
-        cmd = [args.python, str(stage.script_path)]
+        cmd = [args.python, str(stage.script_path), *stage.extra_args]
         print(f"\n==> [{stage.stage_id}] {stage.title}")
         print(" ".join(cmd))
         if args.dry_run:
