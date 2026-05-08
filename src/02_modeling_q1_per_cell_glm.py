@@ -15,6 +15,7 @@ Ukrainian-only, Russian-only. Crimean Tatar / Qirimli poems are excluded upstrea
 from __future__ import annotations
 
 import argparse
+import hashlib
 import logging
 from pathlib import Path
 
@@ -47,6 +48,67 @@ DEFAULT_OUTPUT = ROOT / "outputs" / "02_modeling_q1_per_cell_glm"
 PERIOD_P1 = "P1_2014_2021"
 PERIOD_P2 = "P2_2022_plus"
 PERIODS = (PERIOD_P1, PERIOD_P2)
+
+
+def _exposure_column_name(exposure_type: str) -> str:
+    if exposure_type == "n_stanzas":
+        return "exposure_n_stanzas"
+    if exposure_type == "n_tokens":
+        return "exposure_n_tokens"
+    if exposure_type == "n_finite_verbs":
+        return "exposure_n_finite_verbs"
+    if exposure_type == "n_finite_verbs_excl_imperative":
+        return "exposure_n_finite_verbs_excl_imperative"
+    raise ValueError(f"Unknown exposure_type: {exposure_type!r}")
+
+
+def _wild_cluster_bootstrap_single_coef(
+    cdf: pd.DataFrame,
+    formula: str,
+    term: str,
+    *,
+    b_reps: int,
+    seed: int,
+) -> float:
+    if int(b_reps) <= 0:
+        return np.nan
+    fit = smf.glm(formula, data=cdf, family=sm.families.Poisson(), offset=cdf["log_exposure"]).fit()
+    if term not in fit.params.index:
+        return np.nan
+    se_obs = float(fit.bse[term]) if term in fit.bse.index else np.nan
+    if not np.isfinite(se_obs) or se_obs <= 0:
+        return np.nan
+    t_obs = float(fit.params[term] / se_obs)
+    resid = cdf["k"].to_numpy(dtype=float) - fit.fittedvalues.to_numpy(dtype=float)
+    mu = fit.fittedvalues.to_numpy(dtype=float)
+    groups = cdf["author"].astype(str).to_numpy()
+    uniq = np.unique(groups)
+    rng = np.random.default_rng(int(seed))
+    extreme = 0
+    valid = 0
+    for _ in range(int(b_reps)):
+        w_map = {g: rng.choice([-1.0, 1.0]) for g in uniq}
+        signs = np.array([w_map[g] for g in groups], dtype=float)
+        y_star = np.clip(mu + signs * resid, 1e-8, None)
+        bdf = cdf.copy()
+        bdf["k"] = y_star
+        try:
+            bfit = smf.glm(formula, data=bdf, family=sm.families.Poisson(), offset=bdf["log_exposure"]).fit()
+        except Exception:
+            continue
+        if term not in bfit.params.index or term not in bfit.bse.index:
+            continue
+        se_b = float(bfit.bse[term])
+        if not np.isfinite(se_b) or se_b <= 0:
+            continue
+        t_b = float(bfit.params[term] / se_b)
+        if np.isfinite(t_b):
+            valid += 1
+            if abs(t_b) >= abs(t_obs):
+                extreme += 1
+    if valid == 0:
+        return np.nan
+    return float((extreme + 1.0) / (valid + 1.0))
 
 
 def build_exposure_diagnostics(poem_df: pd.DataFrame) -> pd.DataFrame:
@@ -162,16 +224,7 @@ def fit_q1_poisson_per_cell(
     if dat.empty:
         return pd.DataFrame()
 
-    if exposure_type == "n_stanzas":
-        ex_col = "exposure_n_stanzas"
-    elif exposure_type == "n_tokens":
-        ex_col = "exposure_n_tokens"
-    elif exposure_type == "n_finite_verbs":
-        ex_col = "exposure_n_finite_verbs"
-    elif exposure_type == "n_finite_verbs_excl_imperative":
-        ex_col = "exposure_n_finite_verbs_excl_imperative"
-    else:
-        raise ValueError(f"Unknown exposure_type: {exposure_type!r}")
+    ex_col = _exposure_column_name(exposure_type)
 
     rows: list[dict[str, object]] = []
     is_primary = primary_stratum_for_bh(language_stratum)
@@ -228,6 +281,141 @@ def fit_q1_poisson_per_cell(
     return out
 
 
+def fit_q1_coprimary_per_cell(
+    poem_df: pd.DataFrame,
+    roster_authors: set[str] | None,
+    min_total: int,
+    *,
+    language_stratum: str,
+    period_col: str = "period3",
+    period_reference: str = PERIOD_P1,
+    period_treatment: str = PERIOD_P2,
+    exposure_type: str = "n_stanzas",
+    bootstrap_reps: int = 1999,
+    bootstrap_seed: int = 20260508,
+) -> pd.DataFrame:
+    dat = poem_df.copy()
+    if exposure_type == "n_finite_verbs" and "include_in_fv_offset_models" in dat.columns:
+        dat = dat.loc[dat["include_in_fv_offset_models"].astype(bool)].copy()
+    elif exposure_type == "n_finite_verbs_excl_imperative" and "include_in_fv_excl_imp_offset_models" in dat.columns:
+        dat = dat.loc[dat["include_in_fv_excl_imp_offset_models"].astype(bool)].copy()
+    elif exposure_type in ("n_stanzas", "n_tokens") and "include_in_offset_models" in dat.columns:
+        dat = dat.loc[dat["include_in_offset_models"].astype(bool)].copy()
+    dat = dat[dat[period_col].isin((period_reference, period_treatment))]
+    dat = dat[dat["n_total"].ge(int(min_total))]
+    if roster_authors is not None:
+        dat = dat[dat["author"].astype(str).isin(roster_authors)]
+    if dat.empty:
+        return pd.DataFrame()
+    ex_col = _exposure_column_name(exposure_type)
+    rows: list[dict[str, object]] = []
+    is_primary = primary_stratum_for_bh(language_stratum)
+    for cell in PRIMARY_GLM_CELLS:
+        cdf = dat.copy()
+        cdf["k"] = cdf[cell].astype(int)
+        cdf["_ex"] = cdf[ex_col].astype(float)
+        cdf = cdf[cdf["_ex"].gt(0) & np.isfinite(cdf["_ex"])].copy()
+        if cdf.empty:
+            continue
+        cdf["log_exposure"] = np.log(cdf["_ex"])
+        if cdf[period_col].nunique() < 2 or int(cdf["k"].sum()) == 0:
+            continue
+        groups = cdf["author"].astype(str)
+        formula = f"k ~ C({period_col}, Treatment('{period_reference}'))"
+        term = f"C({period_col}, Treatment('{period_reference}'))[T.{period_treatment}]"
+        # Poisson + clustered SE
+        try:
+            fit_pois = smf.glm(formula, data=cdf, family=sm.families.Poisson(), offset=cdf["log_exposure"]).fit(
+                cov_type="cluster", cov_kwds={"groups": groups}
+            )
+            if term in fit_pois.params.index:
+                ci = fit_pois.conf_int().loc[term]
+                coef = float(fit_pois.params[term])
+                p_wild = _wild_cluster_bootstrap_single_coef(
+                    cdf,
+                    formula,
+                    term,
+                    b_reps=bootstrap_reps,
+                    seed=bootstrap_seed
+                    + int(
+                        hashlib.md5(f"{language_stratum}|{cell}|{exposure_type}".encode("utf-8")).hexdigest()[:8], 16
+                    )
+                    % 100_000,
+                )
+                rows.append(
+                    {
+                        "language_stratum": language_stratum,
+                        "cell": cell,
+                        "model_variant": "poisson_cluster",
+                        "n_poems": int(len(cdf)),
+                        "n_authors": int(groups.nunique()),
+                        "coef_post_vs_pre_log_mu": coef,
+                        "rate_ratio_post_vs_pre": float(np.exp(coef)),
+                        "ci95_low_log_mu": float(ci.iloc[0]),
+                        "ci95_high_log_mu": float(ci.iloc[1]),
+                        "rate_ratio_ci95_low": float(np.exp(ci.iloc[0])),
+                        "rate_ratio_ci95_high": float(np.exp(ci.iloc[1])),
+                        "se_clustered_author": float(fit_pois.bse[term]),
+                        "z_value_clustered_author": float(fit_pois.tvalues[term]),
+                        "p_value_clustered_author": float(fit_pois.pvalues[term]),
+                        "p_value_wild_cluster_bootstrap": p_wild,
+                        "exposure_type": exposure_type,
+                        "is_primary_stratum": bool(is_primary),
+                    }
+                )
+        except Exception:
+            pass
+        # NB + clustered SE
+        try:
+            fit_nb = smf.negativebinomial(formula, data=cdf, offset=cdf["log_exposure"]).fit(
+                disp=0, cov_type="cluster", cov_kwds={"groups": groups}
+            )
+            if term in fit_nb.params.index:
+                ci_nb = fit_nb.conf_int().loc[term]
+                coef_nb = float(fit_nb.params[term])
+                rows.append(
+                    {
+                        "language_stratum": language_stratum,
+                        "cell": cell,
+                        "model_variant": "negative_binomial_cluster",
+                        "n_poems": int(len(cdf)),
+                        "n_authors": int(groups.nunique()),
+                        "coef_post_vs_pre_log_mu": coef_nb,
+                        "rate_ratio_post_vs_pre": float(np.exp(coef_nb)),
+                        "ci95_low_log_mu": float(ci_nb.iloc[0]),
+                        "ci95_high_log_mu": float(ci_nb.iloc[1]),
+                        "rate_ratio_ci95_low": float(np.exp(ci_nb.iloc[0])),
+                        "rate_ratio_ci95_high": float(np.exp(ci_nb.iloc[1])),
+                        "se_clustered_author": float(fit_nb.bse[term]),
+                        "z_value_clustered_author": float(fit_nb.tvalues[term]),
+                        "p_value_clustered_author": float(fit_nb.pvalues[term]),
+                        "p_value_wild_cluster_bootstrap": np.nan,
+                        "exposure_type": exposure_type,
+                        "is_primary_stratum": bool(is_primary),
+                    }
+                )
+        except Exception:
+            pass
+    out = pd.DataFrame(rows)
+    if out.empty:
+        return out
+    out["q_value_bh_within_stratum"] = np.nan
+    out["q_value_bh_wild_within_stratum"] = np.nan
+    sub = out.loc[out["is_primary_stratum"]]
+    if not sub.empty:
+        q_cluster = (
+            sub.groupby(["language_stratum", "model_variant"], group_keys=False)["p_value_clustered_author"].apply(bh_adjust)
+        )
+        out.loc[q_cluster.index, "q_value_bh_within_stratum"] = q_cluster
+        q_wild = (
+            sub.loc[sub["model_variant"].eq("poisson_cluster")]
+            .groupby(["language_stratum", "model_variant"], group_keys=False)["p_value_wild_cluster_bootstrap"]
+            .apply(bh_adjust)
+        )
+        out.loc[q_wild.index, "q_value_bh_wild_within_stratum"] = q_wild
+    return out
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     print(
@@ -270,6 +458,18 @@ def main() -> None:
         default=None,
         help="Path to stanza_finite_verb_counts.csv (default: data/To_run/00_filtering/...).",
     )
+    parser.add_argument(
+        "--bootstrap-reps",
+        type=int,
+        default=1999,
+        help="Wild-cluster bootstrap repetitions for Q1 co-primary Poisson path.",
+    )
+    parser.add_argument(
+        "--bootstrap-seed",
+        type=int,
+        default=20260508,
+        help="Random seed for Q1 co-primary Poisson wild-cluster bootstrap.",
+    )
     args = parser.parse_args()
 
     want_strata = tuple(s.strip() for s in args.strata.split(",") if s.strip())
@@ -300,6 +500,7 @@ def main() -> None:
     build_exposure_diagnostics(poem_full).to_csv(out_dir / "q1_exposure_diagnostics.csv", index=False)
 
     frames: list[pd.DataFrame] = []
+    coprimary_frames: list[pd.DataFrame] = []
     for stratum in want_strata:
         poem_sub = filter_poems_by_language_stratum(poem_full, stratum)
         qdf = fit_q1_poisson_per_cell(
@@ -311,18 +512,33 @@ def main() -> None:
         )
         if not qdf.empty:
             frames.append(qdf)
+        cdf = fit_q1_coprimary_per_cell(
+            poem_sub,
+            roster_authors,
+            args.min_total_per_poem,
+            language_stratum=stratum,
+            exposure_type=args.exposure_type,
+            bootstrap_reps=args.bootstrap_reps,
+            bootstrap_seed=args.bootstrap_seed,
+        )
+        if not cdf.empty:
+            coprimary_frames.append(cdf)
 
     combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    combined_coprimary = pd.concat(coprimary_frames, ignore_index=True) if coprimary_frames else pd.DataFrame()
 
     poem_full.to_csv(out_dir / "q1_poem_unit_cell_counts_12.csv", index=False)
 
     if args.exposure_type == "n_stanzas":
         glm_out_name = "q1_poem_per_cell_glm_by_language.csv"
+        coprimary_out_name = "q1_poem_per_cell_glm_by_language_coprimary.csv"
     else:
         # Single-underscore + descriptive suffix to match the robustness-file
         # naming convention (e.g. ..._robust_period_invasion_20220224.csv).
         glm_out_name = f"q1_poem_per_cell_glm_by_language_offset_{args.exposure_type}.csv"
+        coprimary_out_name = f"q1_poem_per_cell_glm_by_language_offset_{args.exposure_type}_coprimary.csv"
     combined.to_csv(out_dir / glm_out_name, index=False)
+    combined_coprimary.to_csv(out_dir / coprimary_out_name, index=False)
 
     readme_path = out_dir / "README.md"
     if not readme_path.is_file() or args.exposure_type == "n_stanzas":
@@ -357,6 +573,11 @@ def main() -> None:
             f.write(
                 "- Model: Poisson with `offset(log_exposure)`; clustered SE by author; BH-FDR within "
                 "stratum among primary strata rows only.\n"
+            )
+            f.write(
+                "- Co-primary inference file: `*_coprimary.csv` contains parallel estimates for "
+                "`poisson_cluster` (with wild-cluster bootstrap p-values) and "
+                "`negative_binomial_cluster`.\n"
             )
             f.write("\n## Limitations of the finite-verb offset\n\n")
             f.write(

@@ -131,16 +131,14 @@ def main() -> None:
 
     cohort_filtered = robp.spec_author_onset_le2014(filtered.copy(), layer0_path)
     fv_df = resolve_finite_verb_counts_for_modeling(ROOT, exposure_type="n_stanzas")
-    poem_tbl = build_poem_cell_table_with_exposure(cohort_filtered, finite_verb_df=fv_df)
-
     roster_parts: list[pd.DataFrame] = []
     frames: list[pd.DataFrame] = []
+    poem_tbl = build_poem_cell_table_with_exposure(cohort_filtered, finite_verb_df=fv_df)
     for stratum in LANGUAGE_STRATA:
         roster_df = _cohort_roster_for_stratum(poem_tbl, stratum)
         if not roster_df.empty:
             roster_parts.append(roster_df)
         n_auth = int(roster_df.shape[0])
-
         sub = filter_poems_by_language_stratum(poem_tbl, stratum)
         g = q1.fit_q1_poisson_per_cell(
             sub,
@@ -152,7 +150,6 @@ def main() -> None:
         if g.empty:
             continue
         g = g.copy()
-        # Demote BH: this contrast is exploratory by construction.
         g["is_primary_stratum"] = False
         g["q_value_bh_within_stratum"] = float("nan")
         g["cohort_definition"] = f"author_first_observed_year_le_{COHORT_ONSET_THRESHOLD}"

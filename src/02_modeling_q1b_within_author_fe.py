@@ -80,15 +80,16 @@ def _fit_within_author_fe_per_cell(
     cell: str,
     exposure_col: str = "exposure_n_stanzas",
 ) -> pd.DataFrame:
-    """Parametric Q1b: Poisson FE with author×period interactions, HC1 SEs.
+    """Parametric Q1b: Poisson FE with author×period interactions, HC3 SEs.
 
     Identifiability rule (strict per-cell): an author enters the fit only if they
     have ≥1 event of THIS cell in BOTH P1 and P2 — not merely ≥1 poem in each.
     The previous "any poem in both periods" rule produced separation when an
     author had 0 events in one period (MLE = ±∞) and IRLS reported coefs in the
     1e+10 / 1e-19 range with cluster-robust covariance numerically rank-deficient
-    (cluster-on-FE-dimension collapses the meat matrix). HC1 is used instead of
-    cluster-on-author because clustering on the FE dimension is degenerate.
+    (cluster-on-FE-dimension collapses the meat matrix). HC3 is used instead of
+    cluster-on-author because clustering on the FE dimension is degenerate, and
+    HC3 is more conservative than HC1 in finite samples.
     """
     dat = poem_df.copy()
     if "include_in_offset_models" in dat.columns:
@@ -133,7 +134,7 @@ def _fit_within_author_fe_per_cell(
     )
     for attempt in fit_attempts:
         try:
-            fit = model.fit(cov_type="HC1", **attempt)
+            fit = model.fit(cov_type="HC3", **attempt)
             break
         except Exception as exc:  # numerical failures are still possible after filter
             last_exc = exc
@@ -165,7 +166,8 @@ def _fit_within_author_fe_per_cell(
                 "interaction_rate_ratio": float(np.exp(coef)),
                 "ci95_low": float(ci.iloc[0]),
                 "ci95_high": float(ci.iloc[1]),
-                "se_hc1": float(fit.bse[pname_str]),
+                "se_hc3": float(fit.bse[pname_str]),
+                "covariance_type": "HC3",
                 "p_value": float(fit.pvalues[pname_str]),
             }
         )

@@ -38,6 +38,13 @@ def build_pipeline_catalog() -> list[PipelineStage]:
         ("01c", src / "01_annotation_rule_annotate_pronouns.py", "Rule Annotation", "Heuristic pilot labeling on sampled pronouns.", ()),
         ("01d", src / "01_annotation_gpt_annotation.py", "GPT Annotation", "Stanza-level GPT pronoun annotation.", ()),
         ("01e", src / "01_annotation_gpt_annotate_full.py", "Full GPT Runner", "Wrapper for full/public GPT annotation runs.", ()),
+        (
+            "01f",
+            src / "01_annotation_vy_register_audit.py",
+            "vy_register audit",
+            "Manual QA package: full polite-singular census + stratified true-plural sample and optional agreement scoring.",
+            (),
+        ),
         # --- Core analyses (frequentist, 4-cell unless flagged Bayesian) ---
         ("02a", src / "02_modeling_significance_core_contrasts.py", "Core Contrasts", "Two-period confirmatory contrasts and sensitivity.", ()),
         ("02b", src / "02_modeling_q1_per_cell_glm.py", "Q1 Per-cell GLM (stanza offset)", "Per-cell Poisson with stanza offset (4-cell primary inference).", ()),
@@ -68,6 +75,13 @@ def build_pipeline_catalog() -> list[PipelineStage]:
             src / "02_modeling_robustness_offset_comparison.py",
             "Offset comparison",
             "Join Q1 offset GLM CSVs into long/wide tables and forest plots (3- or 4-way).",
+            (),
+        ),
+        (
+            "02bsc",
+            src / "02_modeling_specification_curve.py",
+            "Specification curve",
+            "Aggregate Q1/Q1c robustness combinations into specification-curve table and figure.",
             (),
         ),
         # --- Bayesian path (5-cell, retains polite-singular under shrinkage) ---

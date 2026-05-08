@@ -23,7 +23,7 @@ from utils.language_strata import (
 from utils.finite_verb_exposure import resolve_finite_verb_counts_for_modeling
 from utils.poem_cell_counts import build_poem_cell_table_with_exposure
 from utils.pronoun_encoding import PRIMARY_GLM_CELLS_BAYESIAN, pronoun_class_sixway_column
-from utils.stats_common import normalize_bool_flag, period_three_way
+from utils.stats_common import bh_adjust, normalize_bool_flag, period_three_way
 from utils.workspace import prepare_analysis_environment
 
 ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
@@ -249,6 +249,8 @@ def fit_hierarchical_per_cell(
         fixed_mean = float(np.mean(fixed))
         fixed_low = float(np.quantile(fixed, 0.025))
         fixed_high = float(np.quantile(fixed, 0.975))
+        fixed_p_gt0 = float(np.mean(fixed > 0.0))
+        fixed_false_sign_risk = float(min(fixed_p_gt0, 1.0 - fixed_p_gt0))
         fixed_rows.append(
             {
                 "language_stratum": language_stratum,
@@ -262,6 +264,8 @@ def fit_hierarchical_per_cell(
                 "population_shift_rate_ratio_mean": float(np.exp(fixed_mean)),
                 "population_shift_rate_ratio_hdi95_low": float(np.exp(fixed_low)),
                 "population_shift_rate_ratio_hdi95_high": float(np.exp(fixed_high)),
+                "population_shift_p_direction_gt0": fixed_p_gt0,
+                "population_shift_false_sign_risk": fixed_false_sign_risk,
                 "exposure_type": exposure_type,
             }
         )
@@ -280,9 +284,13 @@ def fit_hierarchical_per_cell(
             dev_mean = float(np.mean(dev_samples))
             dev_low = float(np.quantile(dev_samples, 0.025))
             dev_high = float(np.quantile(dev_samples, 0.975))
+            dev_p_gt0 = float(np.mean(dev_samples > 0.0))
+            dev_false_sign_risk = float(min(dev_p_gt0, 1.0 - dev_p_gt0))
             total_mean = float(np.mean(total_samples))
             total_low = float(np.quantile(total_samples, 0.025))
             total_high = float(np.quantile(total_samples, 0.975))
+            total_p_gt0 = float(np.mean(total_samples > 0.0))
+            total_false_sign_risk = float(min(total_p_gt0, 1.0 - total_p_gt0))
             author_rows.append(
                 {
                     "language_stratum": language_stratum,
@@ -291,9 +299,13 @@ def fit_hierarchical_per_cell(
                     "author_period_shift_deviation_mean_log_mu": dev_mean,
                     "author_period_shift_deviation_hdi95_low": dev_low,
                     "author_period_shift_deviation_hdi95_high": dev_high,
+                    "author_period_shift_deviation_p_direction_gt0": dev_p_gt0,
+                    "author_period_shift_deviation_false_sign_risk": dev_false_sign_risk,
                     "author_total_period_shift_mean_log_mu": total_mean,
                     "author_total_period_shift_hdi95_low": total_low,
                     "author_total_period_shift_hdi95_high": total_high,
+                    "author_total_period_shift_p_direction_gt0": total_p_gt0,
+                    "author_total_period_shift_false_sign_risk": total_false_sign_risk,
                     "author_total_period_shift_rate_ratio_mean": float(np.exp(total_mean)),
                     "author_total_period_shift_rate_ratio_hdi95_low": float(np.exp(total_low)),
                     "author_total_period_shift_rate_ratio_hdi95_high": float(np.exp(total_high)),
@@ -484,6 +496,22 @@ def main() -> None:
     poem_cell.to_csv(out_dir / "q2_poem_cell_counts_12.csv", index=False)
     fixed_df = pd.concat(fixed_parts, ignore_index=True) if fixed_parts else pd.DataFrame()
     author_df = pd.concat(author_parts, ignore_index=True) if author_parts else pd.DataFrame()
+    if not fixed_df.empty and "population_shift_p_direction_gt0" in fixed_df.columns:
+        fixed_df["population_shift_q_direction"] = (
+            fixed_df.groupby(["language_stratum", "exposure_type"], group_keys=False)["population_shift_false_sign_risk"]
+            .apply(bh_adjust)
+        )
+    if not author_df.empty and "author_total_period_shift_p_direction_gt0" in author_df.columns:
+        author_df["author_total_period_shift_q_direction"] = (
+            author_df.groupby(["language_stratum", "cell", "exposure_type"], group_keys=False)[
+                "author_total_period_shift_false_sign_risk"
+            ].apply(bh_adjust)
+        )
+        author_df["author_period_shift_deviation_q_direction"] = (
+            author_df.groupby(["language_stratum", "cell", "exposure_type"], group_keys=False)[
+                "author_period_shift_deviation_false_sign_risk"
+            ].apply(bh_adjust)
+        )
     fixed_df.to_csv(out_dir / "q2_population_shifts_by_cell.csv", index=False)
     author_df.to_csv(out_dir / "q2_author_random_slope_summaries.csv", index=False)
 
@@ -500,6 +528,10 @@ def main() -> None:
         f.write("- Strata: `pooled_Ukrainian_Russian`, `Ukrainian`, `Russian`.\n")
         f.write("- Default model: `k ~ period_post + offset(log_exposure) + (1 + period_post | author)` (NB).\n")
         f.write(f"- Exposure used in this run: `{args.exposure_type}`.\n")
+        f.write(
+            "- Posterior direction columns are included (`*_p_direction_gt0`, `*_false_sign_risk`, "
+            "`*_q_direction`) so author-level claims are not based only on HDI exclusion of zero.\n"
+        )
 
     print(f"Wrote Q2 outputs to: {out_dir}")
 
