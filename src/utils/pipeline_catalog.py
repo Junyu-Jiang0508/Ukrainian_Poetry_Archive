@@ -35,6 +35,7 @@ def build_pipeline_catalog() -> list[PipelineStage]:
         ("02a", src / "02_modeling_significance_core_contrasts.py", "Core Contrasts", "Two-period confirmatory contrasts and sensitivity.", ()),
         ("02b", src / "02_modeling_q1_per_cell_glm.py", "Q1 Per-cell GLM (stanza offset)", "Per-cell Poisson with stanza offset (4-cell primary inference).", ()),
         ("02b2", src / "02_modeling_q1_per_cell_glm.py", "Q1 Per-cell GLM (token offset)", "Same script, --exposure-type=n_tokens; written side-by-side as token-offset sensitivity.", ("--exposure-type", "n_tokens")),
+        ("02b3", src / "02_modeling_q1_per_cell_glm.py", "Q1 Per-cell GLM (finite-verb offset)", "Same script, --exposure-type=n_finite_verbs; syntactic-slot exposure sensitivity.", ("--exposure-type", "n_finite_verbs")),
         ("02bq1c", src / "02_modeling_q1c_pre_invasion_cohort.py", "Q1c Pre-invasion Cohort", "Exploratory Q1 GLM restricted to authors with first observed year ≤ 2014 (not in main BH family).", ()),
         ("02bq1b", src / "02_modeling_q1b_within_author_fe.py", "Q1b Author×Period FE + Bootstrap", "Parametric Poisson FE (HC1 + strict per-cell filter) and per-author δ bootstrap.", ()),
         ("02bq3", src / "02_modeling_q3_sparse_2pl_aggregated.py", "Q3 Sparse legacy 2pl", "Supplementary author×period legacy-2pl aggregation models.", ()),

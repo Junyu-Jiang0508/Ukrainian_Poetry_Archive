@@ -7,6 +7,7 @@ import logging
 import numpy as np
 import pandas as pd
 
+from utils.finite_verb_exposure import count_finite_verbs_in_text
 from utils.pronoun_encoding import (
     CELL_2PL_LEGACY,
     CELL_2PL_VY_POLITE_SINGULAR,
@@ -19,6 +20,16 @@ from utils.pronoun_encoding import (
 from utils.stats_common import period_three_way
 
 log = logging.getLogger(__name__)
+
+
+def _progress_iter(items: list[tuple[str, pd.DataFrame]], *, desc: str):
+    """Progress iterator with graceful fallback when tqdm is unavailable."""
+    try:
+        from tqdm import tqdm  # type: ignore
+
+        return tqdm(items, desc=desc, unit="poem")
+    except Exception:
+        return items
 
 
 def _stanza_token_count(text: object) -> int:
@@ -75,6 +86,7 @@ def build_poem_cell_table_with_exposure(df: pd.DataFrame) -> pd.DataFrame:
                             "exposure_n_stanzas": 0,
                             "exposure_n_stanza_index_max": np.nan,
                             "exposure_n_tokens": 0,
+                            "exposure_n_finite_verbs": 0,
                             "min_stanzas": 0,
                             "min_tokens": 0,
                         }
@@ -82,7 +94,8 @@ def build_poem_cell_table_with_exposure(df: pd.DataFrame) -> pd.DataFrame:
                 )
             )
     else:
-        for pid, g in df_work.groupby("_pid", sort=False):
+        poem_groups = list(df_work.groupby("_pid", sort=False))
+        for pid, g in _progress_iter(poem_groups, desc="Building poem exposure"):
             stanza_series = pd.to_numeric(g["stanza_index"], errors="coerce")
             g2 = g.assign(_stanza_num=stanza_series)
             g2_valid = g2.loc[g2["_stanza_num"].notna()]
@@ -95,6 +108,7 @@ def build_poem_cell_table_with_exposure(df: pd.DataFrame) -> pd.DataFrame:
                                 "exposure_n_stanzas": 0,
                                 "exposure_n_stanza_index_max": np.nan,
                                 "exposure_n_tokens": 0,
+                                "exposure_n_finite_verbs": 0,
                                 "min_stanzas": 0,
                                 "min_tokens": 0,
                             }
@@ -113,6 +127,7 @@ def build_poem_cell_table_with_exposure(df: pd.DataFrame) -> pd.DataFrame:
                 .reset_index()
             )
             agg["_tok"] = agg["stanza_txt"].map(_stanza_token_count)
+            agg["_fv"] = agg["stanza_txt"].map(count_finite_verbs_in_text)
             exposure_n_stanzas = int(agg.shape[0])
             stanza_max = float(agg["_stanza_num"].max())
             mx_int = int(round(stanza_max)) if np.isfinite(stanza_max) else 0
@@ -125,6 +140,7 @@ def build_poem_cell_table_with_exposure(df: pd.DataFrame) -> pd.DataFrame:
                 )
 
             exposure_tokens = int(agg["_tok"].sum())
+            exposure_finite_verbs = int(agg["_fv"].sum())
             min_tok_stanza = int(agg["_tok"].min()) if len(agg) else 0
 
             stanza_chunks.append(
@@ -135,6 +151,7 @@ def build_poem_cell_table_with_exposure(df: pd.DataFrame) -> pd.DataFrame:
                             "exposure_n_stanzas": exposure_n_stanzas,
                             "exposure_n_stanza_index_max": stanza_max,
                             "exposure_n_tokens": exposure_tokens,
+                            "exposure_n_finite_verbs": exposure_finite_verbs,
                             "min_stanzas": exposure_n_stanzas,
                             "min_tokens": min_tok_stanza,
                         }
@@ -146,6 +163,7 @@ def build_poem_cell_table_with_exposure(df: pd.DataFrame) -> pd.DataFrame:
     out = counts.merge(exposure, on="poem_id", how="left")
     out["exposure_n_stanzas"] = out["exposure_n_stanzas"].fillna(0).astype(np.int64)
     out["exposure_n_tokens"] = out["exposure_n_tokens"].fillna(0).astype(np.int64)
+    out["exposure_n_finite_verbs"] = out["exposure_n_finite_verbs"].fillna(0).astype(np.int64)
     out["min_stanzas"] = out["min_stanzas"].fillna(0).astype(np.int64)
     out["min_tokens"] = out["min_tokens"].fillna(0).astype(np.int64)
 
@@ -172,6 +190,7 @@ def build_poem_cell_table_with_exposure(df: pd.DataFrame) -> pd.DataFrame:
     out = out.merge(meta, on="poem_id", how="left")
 
     out["include_in_offset_models"] = out["exposure_n_stanzas"].gt(0)
+    out["include_in_fv_offset_models"] = out["exposure_n_finite_verbs"].gt(0)
     for _, row in out.loc[~out["include_in_offset_models"]].iterrows():
         log.warning(
             "[cell_counts] zero_stanza_exposure poem_id=%s exposure_n_stanzas=%s exposure_n_tokens=%s",
@@ -183,11 +202,13 @@ def build_poem_cell_table_with_exposure(df: pd.DataFrame) -> pd.DataFrame:
     kept = out.loc[out["include_in_offset_models"]]
     if len(kept):
         log.info(
-            "[cell_counts] summary: n_poems=%s min_exposure_n_stanzas=%s min_exposure_n_tokens=%s n_zero_stanza=%s",
+            "[cell_counts] summary: n_poems=%s min_exposure_n_stanzas=%s min_exposure_n_tokens=%s min_exposure_n_finite_verbs=%s n_zero_stanza=%s n_zero_finite_verbs=%s",
             len(out),
             int(kept["exposure_n_stanzas"].min()),
             int(kept["exposure_n_tokens"].min()),
+            int(out["exposure_n_finite_verbs"].min()),
             int((~out["include_in_offset_models"]).sum()),
+            int((~out["include_in_fv_offset_models"]).sum()),
         )
     else:
         log.warning("[cell_counts] no poems with positive stanza exposure")
@@ -200,9 +221,11 @@ def build_poem_cell_table_with_exposure(df: pd.DataFrame) -> pd.DataFrame:
             "exposure_n_stanzas",
             "exposure_n_stanza_index_max",
             "exposure_n_tokens",
+            "exposure_n_finite_verbs",
             "min_stanzas",
             "min_tokens",
             "include_in_offset_models",
+            "include_in_fv_offset_models",
             "author",
             "language_clean",
             "year_int",

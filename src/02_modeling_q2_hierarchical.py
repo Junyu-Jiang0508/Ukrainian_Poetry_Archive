@@ -161,11 +161,17 @@ def fit_hierarchical_per_cell(
 
     if exposure_type == "n_stanzas":
         ex_col = "exposure_n_stanzas"
-    else:
+    elif exposure_type == "n_tokens":
         ex_col = "exposure_n_tokens"
+    elif exposure_type == "n_finite_verbs":
+        ex_col = "exposure_n_finite_verbs"
+    else:
+        raise ValueError(f"Unknown exposure_type: {exposure_type!r}")
 
     dat = poem_cell.copy()
-    if "include_in_offset_models" in dat.columns:
+    if exposure_type == "n_finite_verbs" and "include_in_fv_offset_models" in dat.columns:
+        dat = dat.loc[dat["include_in_fv_offset_models"].astype(bool)].copy()
+    elif "include_in_offset_models" in dat.columns:
         dat = dat.loc[dat["include_in_offset_models"].astype(bool)].copy()
     dat = dat[dat["period3"].isin(PERIODS)]
     if roster_authors is not None:
@@ -403,7 +409,7 @@ def main() -> None:
         "--exposure-type",
         type=str,
         default="n_stanzas",
-        choices=("n_stanzas", "n_tokens"),
+        choices=("n_stanzas", "n_tokens", "n_finite_verbs"),
     )
     parser.add_argument(
         "--skip-caterpillar",
@@ -479,6 +485,7 @@ def main() -> None:
         )
         f.write("- Strata: `pooled_Ukrainian_Russian`, `Ukrainian`, `Russian`.\n")
         f.write("- Default model: `k ~ period_post + offset(log_exposure) + (1 + period_post | author)` (NB).\n")
+        f.write(f"- Exposure used in this run: `{args.exposure_type}`.\n")
 
     print(f"Wrote Q2 outputs to: {out_dir}")
 

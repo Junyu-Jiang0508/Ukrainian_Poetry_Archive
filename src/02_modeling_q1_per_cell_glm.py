@@ -48,6 +48,36 @@ PERIOD_P2 = "P2_2022_plus"
 PERIODS = (PERIOD_P1, PERIOD_P2)
 
 
+def build_exposure_diagnostics(poem_df: pd.DataFrame) -> pd.DataFrame:
+    """Compact distribution diagnostics for each available exposure definition."""
+    specs = (
+        ("n_stanzas", "exposure_n_stanzas"),
+        ("n_tokens", "exposure_n_tokens"),
+        ("n_finite_verbs", "exposure_n_finite_verbs"),
+    )
+    rows: list[dict[str, object]] = []
+    n_poems = int(len(poem_df))
+    for exposure_type, col in specs:
+        if col not in poem_df.columns:
+            continue
+        s = pd.to_numeric(poem_df[col], errors="coerce").fillna(0.0)
+        rows.append(
+            {
+                "exposure_type": exposure_type,
+                "column": col,
+                "n_poems": n_poems,
+                "min": float(s.min()) if n_poems else np.nan,
+                "p25": float(s.quantile(0.25)) if n_poems else np.nan,
+                "median": float(s.quantile(0.50)) if n_poems else np.nan,
+                "p75": float(s.quantile(0.75)) if n_poems else np.nan,
+                "max": float(s.max()) if n_poems else np.nan,
+                "share_eq_0": float((s == 0).mean()) if n_poems else np.nan,
+                "share_eq_1": float((s == 1).mean()) if n_poems else np.nan,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def load_roster_authors(roster_path: Path | None) -> set[str] | None:
     if roster_path is None or not roster_path.is_file():
         return None
@@ -114,7 +144,9 @@ def fit_q1_poisson_per_cell(
     exposure_type: str = "n_stanzas",
 ) -> pd.DataFrame:
     dat = poem_df.copy()
-    if "include_in_offset_models" in dat.columns:
+    if exposure_type == "n_finite_verbs" and "include_in_fv_offset_models" in dat.columns:
+        dat = dat.loc[dat["include_in_fv_offset_models"].astype(bool)].copy()
+    elif "include_in_offset_models" in dat.columns:
         dat = dat.loc[dat["include_in_offset_models"].astype(bool)].copy()
     dat = dat[dat[period_col].isin((period_reference, period_treatment))]
     dat = dat[dat["n_total"].ge(int(min_total))]
@@ -127,6 +159,8 @@ def fit_q1_poisson_per_cell(
         ex_col = "exposure_n_stanzas"
     elif exposure_type == "n_tokens":
         ex_col = "exposure_n_tokens"
+    elif exposure_type == "n_finite_verbs":
+        ex_col = "exposure_n_finite_verbs"
     else:
         raise ValueError(f"Unknown exposure_type: {exposure_type!r}")
 
@@ -215,8 +249,11 @@ def main() -> None:
         "--exposure-type",
         type=str,
         default="n_stanzas",
-        choices=("n_stanzas", "n_tokens"),
-        help="Offset column: exposure_n_stanzas (primary) or exposure_n_tokens (robustness).",
+        choices=("n_stanzas", "n_tokens", "n_finite_verbs"),
+        help=(
+            "Offset column: exposure_n_stanzas (primary), exposure_n_tokens (robustness), "
+            "or exposure_n_finite_verbs (syntactic-slot robustness)."
+        ),
     )
     args = parser.parse_args()
 
@@ -236,6 +273,7 @@ def main() -> None:
     )
     roster_authors = load_roster_authors(args.roster.resolve() if args.roster else None)
     poem_full = build_poem_cell_table_with_exposure(filtered)
+    build_exposure_diagnostics(poem_full).to_csv(out_dir / "q1_exposure_diagnostics.csv", index=False)
 
     frames: list[pd.DataFrame] = []
     for stratum in want_strata:
@@ -281,6 +319,12 @@ def main() -> None:
                 "`q1_poem_per_cell_glm_by_language_offset_n_tokens.csv`. The two should be compared "
                 "because 74% of poems have `exposure_n_stanzas == 1`, so the stanza-offset is "
                 "degenerate for half the corpus.\n"
+            )
+            f.write(
+                "- Additional robustness option: `--exposure-type=n_finite_verbs` writes "
+                "`q1_poem_per_cell_glm_by_language_offset_n_finite_verbs.csv`, using finite-verb "
+                "counts as a syntactic opportunity denominator. Exposure diagnostics for all available "
+                "denominators are written to `q1_exposure_diagnostics.csv`.\n"
             )
             f.write("- Strata: pooled (non-primary BH), Ukrainian, Russian.\n")
             f.write(
