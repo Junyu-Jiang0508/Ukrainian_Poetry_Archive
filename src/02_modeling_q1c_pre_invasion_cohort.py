@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 
 from utils.language_strata import LANGUAGE_STRATA, filter_poems_by_language_stratum
+from utils.finite_verb_exposure import resolve_finite_verb_counts_for_modeling
 from utils.poem_cell_counts import build_poem_cell_table_with_exposure
 from utils.workspace import prepare_analysis_environment
 
@@ -129,7 +130,8 @@ def main() -> None:
     roster = q1.load_roster_authors(q1.DEFAULT_ROSTER.resolve() if q1.DEFAULT_ROSTER.is_file() else None)
 
     cohort_filtered = robp.spec_author_onset_le2014(filtered.copy(), layer0_path)
-    poem_tbl = build_poem_cell_table_with_exposure(cohort_filtered)
+    fv_df = resolve_finite_verb_counts_for_modeling(ROOT, exposure_type="n_stanzas")
+    poem_tbl = build_poem_cell_table_with_exposure(cohort_filtered, finite_verb_df=fv_df)
 
     roster_parts: list[pd.DataFrame] = []
     frames: list[pd.DataFrame] = []

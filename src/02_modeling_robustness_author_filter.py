@@ -65,6 +65,7 @@ def main() -> None:
     out_base.mkdir(parents=True, exist_ok=True)
     audit = out_base / "language_stratum_audit"
 
+    from utils.finite_verb_exposure import resolve_finite_verb_counts_for_modeling
     from utils.poem_cell_counts import build_poem_cell_table_with_exposure
 
     filtered = q1.load_and_filter(
@@ -72,7 +73,8 @@ def main() -> None:
         q1.DEFAULT_LAYER0.resolve() if q1.DEFAULT_LAYER0.is_file() else None,
         language_audit_dir=audit,
     )
-    poem_full = build_poem_cell_table_with_exposure(filtered)
+    fv_df = resolve_finite_verb_counts_for_modeling(ROOT, exposure_type="n_stanzas")
+    poem_full = build_poem_cell_table_with_exposure(filtered, finite_verb_df=fv_df)
     roster = q1.load_roster_authors(q1.DEFAULT_ROSTER.resolve() if q1.DEFAULT_ROSTER.is_file() else None)
 
     all_rows: list[pd.DataFrame] = []

@@ -15,7 +15,7 @@ This project applies computational methods from corpus linguistics and NLP to an
 
 | # | Question | Stage |
 |---|----------|-------|
-| **RQ1** | How has the referential scope of 1PL *ми* (we) shifted across war phases? | `02b` per-cell GLM (4-cell primary inference, stanza offset) + `02b2` (token offset, sensitivity) |
+| **RQ1** | How has the referential scope of 1PL *ми* (we) shifted across war phases? | `02b` per-cell GLM (4-cell primary, stanza offset) + `02b2`/`02b3`/`02b4` (token / FV / FV-excl-imperative sensitivities); `00e` precomputes FV counts; `02bcmp` joins offset results |
 | **RQ1b** | Which authors drive any observed shift, and is it robust? | `02bq1b` author×period FE (HC1 + strict per-cell filter) and per-author δ bootstrap forests |
 | **RQ1c** | Did the same peace-time poets change, or did war recruit new entrants? | `02bq1c` GLM restricted to authors with first observed year ≤ 2014 (exploratory; not in main BH family) |
 | **RQ2** | How does author-level heterogeneity modulate the period shift? | `02c` hierarchical random-slope (`02_modeling_q2_hierarchical.py`) |
@@ -51,6 +51,7 @@ PYTHONPATH=src python src/00_pipeline_orchestrator.py --list
 | 00b | `00_gpt_human_review_batch.py`               | GPT adjudication for uncertain split rows |
 | 00c | `00_public_list_filter.py`                   | Build public-list corpus + derivative CSVs |
 | 00d | `00_layer0_layer1_to_run_filter.py`          | In-place trim of `data/To_run/00_filtering/` to public-list rules |
+| 00e | `00e_compute_finite_verb_exposure.py`       | Precompute Stanza finite-verb counts per stanza → `stanza_finite_verb_counts.csv` |
 | 01a | `01_annotation_pronoun_detection.py`         | Morphological pronoun detection (spaCy) |
 | 01b | `01_annotation_toolkit.py`                   | Sampling / QA helpers |
 | 01c | `01_annotation_rule_annotate_pronouns.py`    | Heuristic pilot annotation |
@@ -59,11 +60,15 @@ PYTHONPATH=src python src/00_pipeline_orchestrator.py --list
 | 02a | `02_modeling_significance_core_contrasts.py` | Two-period confirmatory contrasts + sensitivity |
 | 02b | `02_modeling_q1_per_cell_glm.py`             | **RQ1**: per-cell GLM, stanza offset (primary, 4-cell frequentist) |
 | 02b2 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_tokens` | **RQ1 sensitivity**: same script, token offset |
+| 02b3 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_finite_verbs` | **RQ1 sensitivity**: finite-verb offset (requires `00e`) |
+| 02b4 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_finite_verbs_excl_imperative` | **RQ1 sensitivity**: FV offset excluding imperatives |
+| 02bvl | `02_modeling_finite_verb_validation_sample.py` | Stratified Stanza validation tokens + morph vs depparse agreement |
 | 02bq1c | `02_modeling_q1c_pre_invasion_cohort.py`   | **RQ1c**: exploratory pre-invasion cohort GLM (not in main BH family) |
 | 02bq1b | `02_modeling_q1b_within_author_fe.py`      | **RQ1b**: parametric author×period FE (HC1) + per-author δ bootstrap |
 | 02bq3 | `02_modeling_q3_sparse_2pl_aggregated.py`   | Supplementary author×period legacy-2pl aggregation |
 | 02brobp | `02_modeling_robustness_period_definitions.py` | Q1 replicated under alternate period encodings |
 | 02broba | `02_modeling_robustness_author_filter.py` | Q1 replicated under min-poems-per-period thresholds |
+| 02bcmp | `02_modeling_robustness_offset_comparison.py` | Join Q1 offset GLM CSVs (long/wide + forest plots) |
 | 02c | `02_modeling_q2_hierarchical.py`             | **RQ2**: hierarchical NB random-slope (5-cell Bayesian; retains polite-singular under shrinkage) |
 | 02d | `02_modeling_significance_models.py`         | Model-based inference for pronoun shifts |
 | 02e | `02_modeling_significance_publication_figures.py` | Publication figures for inferential outputs |
@@ -81,7 +86,7 @@ Ukrainian-Poetry/
 │
 ├── src/
 │   ├── 00_pipeline_orchestrator.py    # Unified runner (--list / --from-stage / --to-stage / --only)
-│   ├── 00_*.py                        # Filtering & corpus build (00a–00d)
+│   ├── 00_*.py                        # Filtering & corpus build (00a–00e)
 │   ├── 01_*.py                        # Annotation (01a–01e)
 │   ├── 02_*.py                        # Modeling (02a–02f)
 │   ├── 03_*.py                        # Reporting (03a, 03b)
@@ -118,6 +123,8 @@ data/raw/ukrpoetry_database.csv ─┬─► 00_filtering.py     ──► data/
 
 data/To_run/00_filtering/layer1_stanzas_one_per_row.csv
         │
+        ├─► 00e_compute_finite_verb_exposure.py ──► data/To_run/00_filtering/stanza_finite_verb_counts.csv
+        │
         ▼
 01_annotation_gpt_annotation.py (async, stanza-level)
         │
@@ -143,6 +150,8 @@ python -m venv .venv
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python -m spacy download uk_core_news_sm
+# Stanza Ukrainian models (for `00e` finite-verb precompute and `02bvl` validation)
+python -m stanza.download uk
 ```
 
 GPT annotation requires an OpenAI API key in `.env`:
@@ -172,7 +181,7 @@ Each stage script can also be invoked directly, e.g.
 
 ## Key Dependencies
 
-- **NLP**: spaCy, Stanza, Transformers
+- **NLP**: spaCy, Stanza (`stanza` package; install Ukrainian models for `00e` / FV offset), Transformers
 - **Statistics**: scipy, statsmodels, ruptures, scikit-learn
 - **Visualization**: matplotlib, seaborn
 - **Annotation**: OpenAI API (GPT-4o-mini), Streamlit (legacy IAA app in `src/utils/_archive/`)

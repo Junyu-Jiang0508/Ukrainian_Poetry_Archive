@@ -14,6 +14,7 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 
 from utils.language_strata import LANGUAGE_STRATA, filter_poems_by_language_stratum
+from utils.finite_verb_exposure import resolve_finite_verb_counts_for_modeling
 from utils.poem_cell_counts import build_poem_cell_table_with_exposure
 from utils.pronoun_encoding import PRIMARY_GLM_CELLS
 from utils.stats_common import bh_adjust
@@ -339,7 +340,8 @@ def main() -> None:
             args.layer0.resolve() if args.layer0 else None,
             language_audit_dir=out_dir / "language_stratum_audit",
         )
-        poem_full = build_poem_cell_table_with_exposure(filt)
+        fv_df = resolve_finite_verb_counts_for_modeling(ROOT, exposure_type="n_stanzas")
+        poem_full = build_poem_cell_table_with_exposure(filt, finite_verb_df=fv_df)
 
     parts: list[pd.DataFrame] = []
     boot_parts: list[pd.DataFrame] = []

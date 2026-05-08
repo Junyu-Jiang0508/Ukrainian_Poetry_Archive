@@ -26,6 +26,13 @@ def build_pipeline_catalog() -> list[PipelineStage]:
         ("00b", src / "00_gpt_human_review_batch.py", "Human Review Batch", "Batch adjudication for uncertain split rows.", ()),
         ("00c", src / "00_public_list_filter.py", "Public-list Filter", "Filter public corpus and derivative files.", ()),
         ("00d", src / "00_layer0_layer1_to_run_filter.py", "To-run Filter", "Trim To_run layer0/layer1 with public-list rules.", ()),
+        (
+            "00e",
+            src / "00e_compute_finite_verb_exposure.py",
+            "Finite-verb precompute",
+            "Stanza finite-verb counts (morph pipeline) → data/To_run/00_filtering/stanza_finite_verb_counts.csv.",
+            (),
+        ),
         ("01a", src / "01_annotation_pronoun_detection.py", "Pronoun Detection", "Detect explicit and dropped pronouns.", ()),
         ("01b", src / "01_annotation_toolkit.py", "Annotation Toolkit", "Sampling, QA, and annotation prep utilities.", ()),
         ("01c", src / "01_annotation_rule_annotate_pronouns.py", "Rule Annotation", "Heuristic pilot labeling on sampled pronouns.", ()),
@@ -36,12 +43,33 @@ def build_pipeline_catalog() -> list[PipelineStage]:
         ("02b", src / "02_modeling_q1_per_cell_glm.py", "Q1 Per-cell GLM (stanza offset)", "Per-cell Poisson with stanza offset (4-cell primary inference).", ()),
         ("02b2", src / "02_modeling_q1_per_cell_glm.py", "Q1 Per-cell GLM (token offset)", "Same script, --exposure-type=n_tokens; written side-by-side as token-offset sensitivity.", ("--exposure-type", "n_tokens")),
         ("02b3", src / "02_modeling_q1_per_cell_glm.py", "Q1 Per-cell GLM (finite-verb offset)", "Same script, --exposure-type=n_finite_verbs; syntactic-slot exposure sensitivity.", ("--exposure-type", "n_finite_verbs")),
+        (
+            "02b4",
+            src / "02_modeling_q1_per_cell_glm.py",
+            "Q1 Per-cell GLM (FV excl imperative)",
+            "Same script, --exposure-type=n_finite_verbs_excl_imperative; imperative-excluded FV offset sensitivity.",
+            ("--exposure-type", "n_finite_verbs_excl_imperative"),
+        ),
+        (
+            "02bvl",
+            src / "02_modeling_finite_verb_validation_sample.py",
+            "FV validation sample",
+            "Stratified Stanza token export + morph vs depparse pipeline agreement diagnostics.",
+            (),
+        ),
         ("02bq1c", src / "02_modeling_q1c_pre_invasion_cohort.py", "Q1c Pre-invasion Cohort", "Exploratory Q1 GLM restricted to authors with first observed year ≤ 2014 (not in main BH family).", ()),
         ("02bq1b", src / "02_modeling_q1b_within_author_fe.py", "Q1b Author×Period FE + Bootstrap", "Parametric Poisson FE (HC1 + strict per-cell filter) and per-author δ bootstrap.", ()),
         ("02bq3", src / "02_modeling_q3_sparse_2pl_aggregated.py", "Q3 Sparse legacy 2pl", "Supplementary author×period legacy-2pl aggregation models.", ()),
         # --- Sensitivity / robustness ---
         ("02brobp", src / "02_modeling_robustness_period_definitions.py", "Robustness Period Specs", "Q1 replicated under alternate period encodings.", ()),
         ("02broba", src / "02_modeling_robustness_author_filter.py", "Robustness Author Thresholds", "Q1 replicated under roster-style min poems per period.", ()),
+        (
+            "02bcmp",
+            src / "02_modeling_robustness_offset_comparison.py",
+            "Offset comparison",
+            "Join Q1 offset GLM CSVs into long/wide tables and forest plots (3- or 4-way).",
+            (),
+        ),
         # --- Bayesian path (5-cell, retains polite-singular under shrinkage) ---
         ("02c", src / "02_modeling_q2_hierarchical.py", "Q2 Hierarchical (5-cell Bayesian)", "Per-cell hierarchical NB with author random slopes; PRIMARY_GLM_CELLS_BAYESIAN.", ()),
         # --- Other modeling + figures ---

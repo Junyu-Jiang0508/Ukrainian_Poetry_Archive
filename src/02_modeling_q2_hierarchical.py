@@ -20,6 +20,7 @@ from utils.language_strata import (
     filter_annotation_for_inference_language,
     filter_poems_by_language_stratum,
 )
+from utils.finite_verb_exposure import resolve_finite_verb_counts_for_modeling
 from utils.poem_cell_counts import build_poem_cell_table_with_exposure
 from utils.pronoun_encoding import PRIMARY_GLM_CELLS_BAYESIAN, pronoun_class_sixway_column
 from utils.stats_common import normalize_bool_flag, period_three_way
@@ -165,13 +166,17 @@ def fit_hierarchical_per_cell(
         ex_col = "exposure_n_tokens"
     elif exposure_type == "n_finite_verbs":
         ex_col = "exposure_n_finite_verbs"
+    elif exposure_type == "n_finite_verbs_excl_imperative":
+        ex_col = "exposure_n_finite_verbs_excl_imperative"
     else:
         raise ValueError(f"Unknown exposure_type: {exposure_type!r}")
 
     dat = poem_cell.copy()
     if exposure_type == "n_finite_verbs" and "include_in_fv_offset_models" in dat.columns:
         dat = dat.loc[dat["include_in_fv_offset_models"].astype(bool)].copy()
-    elif "include_in_offset_models" in dat.columns:
+    elif exposure_type == "n_finite_verbs_excl_imperative" and "include_in_fv_excl_imp_offset_models" in dat.columns:
+        dat = dat.loc[dat["include_in_fv_excl_imp_offset_models"].astype(bool)].copy()
+    elif exposure_type in ("n_stanzas", "n_tokens") and "include_in_offset_models" in dat.columns:
         dat = dat.loc[dat["include_in_offset_models"].astype(bool)].copy()
     dat = dat[dat["period3"].isin(PERIODS)]
     if roster_authors is not None:
@@ -409,7 +414,13 @@ def main() -> None:
         "--exposure-type",
         type=str,
         default="n_stanzas",
-        choices=("n_stanzas", "n_tokens", "n_finite_verbs"),
+        choices=("n_stanzas", "n_tokens", "n_finite_verbs", "n_finite_verbs_excl_imperative"),
+    )
+    parser.add_argument(
+        "--finite-verb-counts",
+        type=Path,
+        default=None,
+        help="Override path to stanza_finite_verb_counts.csv (FV exposure modes require it).",
     )
     parser.add_argument(
         "--skip-caterpillar",
@@ -435,7 +446,10 @@ def main() -> None:
         language_audit_dir=audit_dir,
     )
     roster_authors = load_roster_authors(args.roster.resolve() if args.roster else None)
-    poem_cell = build_poem_cell_table_with_exposure(filtered)
+    fv_df = resolve_finite_verb_counts_for_modeling(
+        ROOT, exposure_type=args.exposure_type, finite_verb_csv=args.finite_verb_counts
+    )
+    poem_cell = build_poem_cell_table_with_exposure(filtered, finite_verb_df=fv_df)
 
     fixed_parts: list[pd.DataFrame] = []
     author_parts: list[pd.DataFrame] = []

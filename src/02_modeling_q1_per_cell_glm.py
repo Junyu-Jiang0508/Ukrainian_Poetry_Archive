@@ -29,6 +29,7 @@ from utils.language_strata import (
     filter_poems_by_language_stratum,
     primary_stratum_for_bh,
 )
+from utils.finite_verb_exposure import resolve_finite_verb_counts_for_modeling
 from utils.poem_cell_counts import build_poem_cell_table_with_exposure
 from utils.pronoun_encoding import PRIMARY_GLM_CELLS, pronoun_class_sixway_column
 from utils.stats_common import bh_adjust, normalize_bool_flag, period_three_way
@@ -54,13 +55,17 @@ def build_exposure_diagnostics(poem_df: pd.DataFrame) -> pd.DataFrame:
         ("n_stanzas", "exposure_n_stanzas"),
         ("n_tokens", "exposure_n_tokens"),
         ("n_finite_verbs", "exposure_n_finite_verbs"),
+        ("n_finite_verbs_excl_imperative", "exposure_n_finite_verbs_excl_imperative"),
     )
     rows: list[dict[str, object]] = []
     n_poems = int(len(poem_df))
     for exposure_type, col in specs:
         if col not in poem_df.columns:
             continue
-        s = pd.to_numeric(poem_df[col], errors="coerce").fillna(0.0)
+        s = pd.to_numeric(poem_df[col], errors="coerce")
+        if s.isna().all():
+            continue
+        s = s.fillna(0.0)
         rows.append(
             {
                 "exposure_type": exposure_type,
@@ -146,7 +151,9 @@ def fit_q1_poisson_per_cell(
     dat = poem_df.copy()
     if exposure_type == "n_finite_verbs" and "include_in_fv_offset_models" in dat.columns:
         dat = dat.loc[dat["include_in_fv_offset_models"].astype(bool)].copy()
-    elif "include_in_offset_models" in dat.columns:
+    elif exposure_type == "n_finite_verbs_excl_imperative" and "include_in_fv_excl_imp_offset_models" in dat.columns:
+        dat = dat.loc[dat["include_in_fv_excl_imp_offset_models"].astype(bool)].copy()
+    elif exposure_type in ("n_stanzas", "n_tokens") and "include_in_offset_models" in dat.columns:
         dat = dat.loc[dat["include_in_offset_models"].astype(bool)].copy()
     dat = dat[dat[period_col].isin((period_reference, period_treatment))]
     dat = dat[dat["n_total"].ge(int(min_total))]
@@ -161,6 +168,8 @@ def fit_q1_poisson_per_cell(
         ex_col = "exposure_n_tokens"
     elif exposure_type == "n_finite_verbs":
         ex_col = "exposure_n_finite_verbs"
+    elif exposure_type == "n_finite_verbs_excl_imperative":
+        ex_col = "exposure_n_finite_verbs_excl_imperative"
     else:
         raise ValueError(f"Unknown exposure_type: {exposure_type!r}")
 
@@ -249,11 +258,17 @@ def main() -> None:
         "--exposure-type",
         type=str,
         default="n_stanzas",
-        choices=("n_stanzas", "n_tokens", "n_finite_verbs"),
+        choices=("n_stanzas", "n_tokens", "n_finite_verbs", "n_finite_verbs_excl_imperative"),
         help=(
             "Offset column: exposure_n_stanzas (primary), exposure_n_tokens (robustness), "
-            "or exposure_n_finite_verbs (syntactic-slot robustness)."
+            "exposure_n_finite_verbs or exposure_n_finite_verbs_excl_imperative (FV robustness)."
         ),
+    )
+    parser.add_argument(
+        "--finite-verb-counts",
+        type=Path,
+        default=None,
+        help="Path to stanza_finite_verb_counts.csv (default: data/To_run/00_filtering/...).",
     )
     args = parser.parse_args()
 
@@ -272,7 +287,16 @@ def main() -> None:
         language_audit_dir=audit_dir,
     )
     roster_authors = load_roster_authors(args.roster.resolve() if args.roster else None)
-    poem_full = build_poem_cell_table_with_exposure(filtered)
+    fv_df = resolve_finite_verb_counts_for_modeling(
+        ROOT,
+        exposure_type=args.exposure_type,
+        finite_verb_csv=args.finite_verb_counts,
+    )
+    poem_full = build_poem_cell_table_with_exposure(
+        filtered,
+        finite_verb_df=fv_df,
+        discontinuity_manifest_path=out_dir / "stanza_index_discontinuities.csv",
+    )
     build_exposure_diagnostics(poem_full).to_csv(out_dir / "q1_exposure_diagnostics.csv", index=False)
 
     frames: list[pd.DataFrame] = []
@@ -323,13 +347,38 @@ def main() -> None:
             f.write(
                 "- Additional robustness option: `--exposure-type=n_finite_verbs` writes "
                 "`q1_poem_per_cell_glm_by_language_offset_n_finite_verbs.csv`, using finite-verb "
-                "counts as a syntactic opportunity denominator. Exposure diagnostics for all available "
-                "denominators are written to `q1_exposure_diagnostics.csv`.\n"
+                "counts as a syntactic opportunity denominator. "
+                "`--exposure-type=n_finite_verbs_excl_imperative` excludes `Mood=Imp` from the FV "
+                "denominator (sensitivity). Precompute counts once via `00e_compute_finite_verb_exposure.py` "
+                "→ `data/To_run/00_filtering/stanza_finite_verb_counts.csv`. Exposure diagnostics for all "
+                "available denominators are written to `q1_exposure_diagnostics.csv`.\n"
             )
             f.write("- Strata: pooled (non-primary BH), Ukrainian, Russian.\n")
             f.write(
                 "- Model: Poisson with `offset(log_exposure)`; clustered SE by author; BH-FDR within "
                 "stratum among primary strata rows only.\n"
+            )
+            f.write("\n## Limitations of the finite-verb offset\n\n")
+            f.write(
+                "- **Imperatives**: default FV counts treat `Mood=Imp` as finite (same syntactic slot as "
+                "other finite verbs but often pro-drop without explicit subject pronouns). Compare "
+                "`n_finite_verbs` vs `n_finite_verbs_excl_imperative` outputs and "
+                "`02_modeling_robustness_offset_comparison.py`.\n"
+            )
+            f.write(
+                "- **Zero copula / ellipsis**: lines like nominal predicates without a finite verb "
+                "contribute pronouns but not to the FV denominator — possible period-asymmetric bias.\n"
+            )
+            f.write(
+                "- **Stanza pipeline**: FV stage uses Stanza `tokenize,pos,lemma`; "
+                "`01_annotation_pronoun_detection.py` uses `tokenize,pos,lemma,depparse`. "
+                "See `finite_verb_validation_pipeline_agreement.csv` from "
+                "`02_modeling_finite_verb_validation_sample.py`.\n"
+            )
+            f.write(
+                "- **Stanza index gaps**: poems where `nunique(stanza_index) != max(stanza_index)` are "
+                "listed in `stanza_index_discontinuities.csv` (upstream segmentation; exposure sums only "
+                "observed stanza indices).\n"
             )
 
     print(f"Wrote Q1 outputs to: {out_dir} (exposure_type={args.exposure_type})")

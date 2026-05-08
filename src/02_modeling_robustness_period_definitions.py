@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from utils.finite_verb_exposure import resolve_finite_verb_counts_for_modeling
 from utils.poem_cell_counts import build_poem_cell_table_with_exposure
 from utils.stats_common import (
     period_p1_p2_exclude_pre_2014,
@@ -104,11 +105,12 @@ def main() -> None:
     layer0_path = q1.DEFAULT_LAYER0 if q1.DEFAULT_LAYER0.is_file() else None
 
     roster = q1.load_roster_authors(q1.DEFAULT_ROSTER.resolve() if q1.DEFAULT_ROSTER.is_file() else None)
+    fv_df = resolve_finite_verb_counts_for_modeling(ROOT, exposure_type="n_stanzas")
 
     for name in want:
         fn = SPECS[name]
         d2 = fn(filtered.copy(), layer0_path)
-        poem = build_poem_cell_table_with_exposure(d2)
+        poem = build_poem_cell_table_with_exposure(d2, finite_verb_df=fv_df)
         frames = []
         from utils.language_strata import LANGUAGE_STRATA, filter_poems_by_language_stratum
 
