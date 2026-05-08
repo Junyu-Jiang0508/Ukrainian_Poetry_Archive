@@ -48,7 +48,9 @@ All RQ scripts read the canonical stanza-level GPT annotation table:
 
 The pipeline is driven by `src/00_pipeline_orchestrator.py` and the
 ordered stage catalog in `src/utils/pipeline_catalog.py`. Every stage has a
-short numeric ID and a single canonical script. To inspect the live order:
+short numeric ID and a single canonical script, plus optional explicit
+`depends_on` dependencies resolved by the orchestrator before execution. To
+inspect the live order:
 
 ```bash
 PYTHONPATH=src python src/00_pipeline_orchestrator.py --list
@@ -76,6 +78,10 @@ PYTHONPATH=src python src/00_pipeline_orchestrator.py --list
 | 02bq1c | `02_modeling_q1c_pre_invasion_cohort.py`   | **RQ1c**: exploratory pre-invasion cohort GLM (not in main BH family) |
 | 02bq1b | `02_modeling_q1b_within_author_fe.py`      | **RQ1b**: parametric author×period FE (HC3) + per-author δ bootstrap |
 | 02bq3 | `02_modeling_q3_sparse_2pl_aggregated.py`   | Supplementary author×period legacy-2pl aggregation |
+| 02brat | `02_modeling_ratio_indices.py`              | Build shared poem-level ratio index table (FV-gated), exclusions, and sensitivity denominator variant |
+| 02bratpop | `02_modeling_ratio_q1_binomial.py`      | Ratio-population binomial GLM with clustered SE + co-primary bootstrap p outputs |
+| 02bratq1b | `02_modeling_ratio_q1b_within_author_fe.py` | Ratio within-author FE binomial + sparsity audits + author-level bootstrap deltas |
+| 02bratq2 | `02_modeling_ratio_q2_hierarchical.py`   | Ratio hierarchical logistic (Bambi), random-slope fallback, author caterpillars |
 | 02brobp | `02_modeling_robustness_period_definitions.py` | Q1 replicated under alternate period encodings |
 | 02broba | `02_modeling_robustness_author_filter.py` | Q1 replicated under min-poems-per-period thresholds |
 | 02bcmp | `02_modeling_robustness_offset_comparison.py` | Join Q1 offset GLM CSVs (long/wide + forest plots) |

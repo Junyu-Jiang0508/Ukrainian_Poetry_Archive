@@ -16,12 +16,16 @@ ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
 DEFAULT_OUTPUT = ROOT / "outputs" / "02_modeling_specification_curve"
 DEFAULT_Q1_DIR = ROOT / "outputs" / "02_modeling_q1_per_cell_glm"
 DEFAULT_PERIOD_DIR = ROOT / "outputs" / "02_modeling_robustness_period"
+DEFAULT_RATIO_DIR = ROOT / "outputs" / "02_modeling_ratio_q1_binomial"
 
 
 def _read(path: Path, spec_label: str, source: str) -> pd.DataFrame:
     if not path.is_file():
         return pd.DataFrame()
-    df = pd.read_csv(path, low_memory=False)
+    try:
+        df = pd.read_csv(path, low_memory=False)
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
     if df.empty:
         return df
     df = df.copy()
@@ -30,7 +34,7 @@ def _read(path: Path, spec_label: str, source: str) -> pd.DataFrame:
     return df
 
 
-def _collect_inputs(q1_dir: Path, period_dir: Path) -> pd.DataFrame:
+def _collect_inputs(q1_dir: Path, period_dir: Path, ratio_dir: Path) -> pd.DataFrame:
     frames: list[pd.DataFrame] = []
     files = [
         (q1_dir / "q1_poem_per_cell_glm_by_language_coprimary.csv", "q1_primary_coprimary", "q1"),
@@ -45,6 +49,7 @@ def _collect_inputs(q1_dir: Path, period_dir: Path) -> pd.DataFrame:
         (period_dir / "q1_poem_per_cell_glm_robust_period_triple_drop_pre2014.csv", "period_drop_pre2014", "period"),
         (period_dir / "q1_poem_per_cell_glm_robust_period_invasion_20220224.csv", "period_posted_invasion", "period"),
         (period_dir / "q1_poem_per_cell_glm_robust_period_author_onset_le2014.csv", "period_author_onset_le2014", "period"),
+        (ratio_dir / "ratio_q1_binomial_by_language.csv", "ratio_primary", "ratio"),
     ]
     for path, spec_label, source in files:
         d = _read(path, spec_label, source)
@@ -60,6 +65,16 @@ def _prepare_curve(df: pd.DataFrame) -> pd.DataFrame:
         out["model_variant"] = "poisson_cluster"
     if "cohort_definition" not in out.columns:
         out["cohort_definition"] = "none"
+    if "rate_ratio_post_vs_pre" not in out.columns and "OR_post_vs_pre" in out.columns:
+        out["rate_ratio_post_vs_pre"] = out["OR_post_vs_pre"]
+    if "rate_ratio_ci95_low" not in out.columns and "ci95_low" in out.columns:
+        out["rate_ratio_ci95_low"] = np.exp(out["ci95_low"])
+    if "rate_ratio_ci95_high" not in out.columns and "ci95_high" in out.columns:
+        out["rate_ratio_ci95_high"] = np.exp(out["ci95_high"])
+    if "cell" not in out.columns and "ratio_index" in out.columns:
+        out["cell"] = out["ratio_index"]
+    if "q_value_bh_within_stratum" not in out.columns and "q_value_bh" in out.columns:
+        out["q_value_bh_within_stratum"] = out["q_value_bh"]
     out["direction_positive"] = out["rate_ratio_post_vs_pre"].gt(1.0)
     out["spec_id"] = (
         out["spec_source"].astype(str)
@@ -84,11 +99,32 @@ def _plot_curve(df: pd.DataFrame, out_path: Path) -> None:
     lo = df["rate_ratio_ci95_low"].to_numpy(dtype=float) if "rate_ratio_ci95_low" in df.columns else y
     hi = df["rate_ratio_ci95_high"].to_numpy(dtype=float) if "rate_ratio_ci95_high" in df.columns else y
     xerr = np.vstack([np.maximum(0.0, y - lo), np.maximum(0.0, hi - y)])
-    ax.errorbar(x, y, yerr=xerr, fmt="o", ms=3, alpha=0.7)
+    ratio_mask = df["spec_source"].astype(str).eq("ratio")
+    if (~ratio_mask).any():
+        ax.errorbar(
+            x[~ratio_mask.to_numpy()],
+            y[~ratio_mask.to_numpy()],
+            yerr=xerr[:, ~ratio_mask.to_numpy()],
+            fmt="o",
+            ms=3,
+            alpha=0.7,
+            label="count-model specs",
+        )
+    if ratio_mask.any():
+        ax.errorbar(
+            x[ratio_mask.to_numpy()],
+            y[ratio_mask.to_numpy()],
+            yerr=xerr[:, ratio_mask.to_numpy()],
+            fmt="D",
+            ms=4,
+            alpha=0.8,
+            label="ratio specs",
+        )
     ax.axhline(1.0, color="black", linestyle="--", linewidth=1)
     ax.set_xlabel("Specification index (sorted by RR)")
     ax.set_ylabel("Rate ratio post vs pre")
     ax.set_title("Specification curve for Q1-family rate-ratio estimates")
+    ax.legend(loc="best")
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
@@ -98,12 +134,13 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Build specification-curve outputs from Q1-family robustness runs.")
     ap.add_argument("--q1-dir", type=Path, default=DEFAULT_Q1_DIR)
     ap.add_argument("--period-dir", type=Path, default=DEFAULT_PERIOD_DIR)
+    ap.add_argument("--ratio-dir", type=Path, default=DEFAULT_RATIO_DIR)
     ap.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     args = ap.parse_args()
 
     out_dir = args.output.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    raw = _collect_inputs(args.q1_dir.resolve(), args.period_dir.resolve())
+    raw = _collect_inputs(args.q1_dir.resolve(), args.period_dir.resolve(), args.ratio_dir.resolve())
     if raw.empty:
         raise SystemExit("No input model outputs found. Run Q1/Q1c/robustness scripts first.")
     curve = _prepare_curve(raw)

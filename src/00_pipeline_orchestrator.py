@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import subprocess
 import sys
 from pathlib import Path
@@ -28,6 +29,48 @@ def _select_stage_ids(args: argparse.Namespace, ordered_ids: list[str]) -> set[s
     if i0 > i1:
         raise ValueError("--from-stage must be before --to-stage in pipeline order")
     return set(ordered_ids[i0 : i1 + 1])
+
+
+def _dependency_closure(selected: set[str], by_id: dict[str, object]) -> set[str]:
+    closure = set(selected)
+    q = deque(selected)
+    while q:
+        sid = q.popleft()
+        stage = by_id[sid]
+        for dep in getattr(stage, "depends_on", ()) or ():
+            dep_l = str(dep).strip().lower()
+            if dep_l not in by_id:
+                raise ValueError(f"Unknown dependency {dep!r} required by stage {stage.stage_id}")
+            if dep_l not in closure:
+                closure.add(dep_l)
+                q.append(dep_l)
+    return closure
+
+
+def _topological_order(stage_ids: set[str], by_id: dict[str, object], ordered_ids: list[str]) -> list[str]:
+    indeg = {sid: 0 for sid in stage_ids}
+    edges: dict[str, list[str]] = {sid: [] for sid in stage_ids}
+    for sid in stage_ids:
+        for dep in getattr(by_id[sid], "depends_on", ()) or ():
+            dep_l = str(dep).strip().lower()
+            if dep_l in stage_ids:
+                indeg[sid] += 1
+                edges[dep_l].append(sid)
+    rank = {sid: i for i, sid in enumerate(ordered_ids)}
+    ready = sorted([sid for sid, d in indeg.items() if d == 0], key=lambda x: rank.get(x, 10**9))
+    out: list[str] = []
+    while ready:
+        cur = ready.pop(0)
+        out.append(cur)
+        for nxt in edges.get(cur, []):
+            indeg[nxt] -= 1
+            if indeg[nxt] == 0:
+                ready.append(nxt)
+        ready.sort(key=lambda x: rank.get(x, 10**9))
+    if len(out) != len(stage_ids):
+        unresolved = sorted(stage_ids - set(out))
+        raise ValueError(f"Cycle detected in stage dependencies: {unresolved}")
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,7 +110,13 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
-    run_list = [by_id[sid] for sid in ordered_ids if sid in selected]
+    try:
+        expanded = _dependency_closure(selected, by_id)
+        run_ids = _topological_order(expanded, by_id, ordered_ids)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    run_list = [by_id[sid] for sid in run_ids]
     if not run_list:
         print("No stages selected.", file=sys.stderr)
         return 2
