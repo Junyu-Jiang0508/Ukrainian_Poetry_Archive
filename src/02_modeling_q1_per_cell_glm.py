@@ -266,6 +266,10 @@ def fit_q1_poisson_per_cell(
                 "p_value_clustered_author": float(fit.pvalues[term]),
                 "exposure_type": exposure_type,
                 "is_primary_stratum": bool(is_primary),
+                "estimand": "absolute_salience",
+                "outcome_scale": "count_per_exposure",
+                "offset_exposure_type": exposure_type,
+                "model_family": "poisson_glm_cluster_robust",
             }
         )
 
@@ -361,6 +365,10 @@ def fit_q1_coprimary_per_cell(
                         "p_value_wild_cluster_bootstrap": p_wild,
                         "exposure_type": exposure_type,
                         "is_primary_stratum": bool(is_primary),
+                        "estimand": "absolute_salience",
+                        "outcome_scale": "count_per_exposure",
+                        "offset_exposure_type": exposure_type,
+                        "model_family": "poisson_glm_cluster_robust",
                     }
                 )
         except Exception:
@@ -392,6 +400,10 @@ def fit_q1_coprimary_per_cell(
                         "p_value_wild_cluster_bootstrap": np.nan,
                         "exposure_type": exposure_type,
                         "is_primary_stratum": bool(is_primary),
+                        "estimand": "absolute_salience",
+                        "outcome_scale": "count_per_exposure",
+                        "offset_exposure_type": exposure_type,
+                        "model_family": "negative_binomial_glm_cluster_robust",
                     }
                 )
         except Exception:
@@ -543,7 +555,19 @@ def main() -> None:
     readme_path = out_dir / "README.md"
     if not readme_path.is_file() or args.exposure_type == "n_stanzas":
         with readme_path.open("w", encoding="utf-8") as f:
-            f.write("# Q1 Per-cell Poisson GLM (1st/2nd person, poem level)\n\n")
+            f.write("# Absolute Salience GLM (Q1 per-cell Poisson/NB, 1st/2nd person, poem level)\n\n")
+            f.write(
+                "- **Estimand**: *absolute salience* — whether each pronoun cell appears at a higher "
+                "absolute rate per exposure unit (stanza / token / finite-verb slot) after 2022 vs "
+                "2014--2021. Each row carries `estimand=\"absolute_salience\"`, "
+                "`outcome_scale=\"count_per_exposure\"`, and an explicit `offset_exposure_type`.\n"
+            )
+            f.write(
+                "- This complements the closed four-cell *attention allocation* analysis in 02a "
+                "(`outputs/02_modeling_significance_core_contrasts/`), which asks the qualitatively "
+                "distinct question of how the relative configuration of 1st/2nd-person pronouns is "
+                "rearranged within a closed pragmatic subspace.\n\n"
+            )
             f.write(
                 "- Primary cells (inference loop, 4-cell): `{1sg, 1pl, 2sg, 2pl_vy_true_plural}`. "
                 "`2pl_vy_polite_singular` is dropped from inference (23 events / 18 poems / 13 authors; "
