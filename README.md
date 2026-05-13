@@ -21,6 +21,33 @@ This project applies computational methods from corpus linguistics and NLP to an
 | **RQ2** | How does author-level heterogeneity modulate the period shift? | `02c` hierarchical random-slope (`02_modeling_q2_hierarchical.py`) |
 | **RQ3** | Are typology- and period-based contrasts robust at corpus and cohort level? | `02a/02d/02f` (significance + typology models) |
 
+**Estimand decoupling between `02b` (Absolute Salience) and `02a` (Attention Allocation).**
+The two confirmatory stages target *different* estimands and must not be conflated in
+the manuscript narrative:
+
+- **`02b` — Absolute Salience.** Per-cell Poisson / NB GLM with offset
+  `log(exposure)` (stanzas, tokens, or finite verbs). Estimand: *"Do poets write
+  absolutely more 1pl (or 2sg, 2pl, 1sg) tokens, controlling for exposure?"*
+  Cells are inferentially independent and the denominator is exposure, not other
+  pronouns.
+- **`02a` — Attention Allocation.** Closed-denominator binomial logit on the
+  four-cell first/second-person quartet
+  `{1sg, 1pl, 2sg, 2pl_vy_true_plural}` with `n_12 = sum(four-cell)` as the
+  trial total. Estimand: *"Within the closed first/second-person sub-space, how
+  is attention reallocated between self (`1sg`) and group (`1pl`), and between
+  intimate (`2sg`) and collective (`2pl`)?"* The closed denominator is a
+  feature, not a bug: it is the natural sample space for a pragmatic
+  attention-allocation question.
+
+Manuscript ordering: report `02b` absolute strength first; then turn to `02a`
+to ask how, *given* changes in absolute strength, the first/second-person
+weights have been internally redistributed. `02a` is fit as a *co-primary*
+combination of (i) a binomial GLMM with random author intercept
+(`lme4::glmer`, via `src/utils/r_glmm_runner.py`) and (ii) a Cox conditional
+logistic regression (`src/utils/conditional_logit_fit.py`), both of which
+avoid the incidental-parameter bias that the unconditional `+ C(author)` MLE
+incurs at our sample size (N ≈ 33 authors).
+
 **Cell-set split between frequentist and Bayesian paths.** The 5-cell split
 (`{1sg, 1pl, 2sg, 2pl_vy_polite_singular, 2pl_vy_true_plural}`) is collapsed to a
 4-cell `PRIMARY_GLM_CELLS_FREQUENTIST` set `{1sg, 1pl, 2sg, 2pl_vy_true_plural}`
@@ -69,8 +96,8 @@ PYTHONPATH=src python src/00_pipeline_orchestrator.py --list
 | 01d | `01_annotation_gpt_annotation.py`            | Stanza-level GPT annotation engine (async) |
 | 01e | `01_annotation_gpt_annotate_full.py`         | Wrapper that runs 01d with `--source public` |
 | 01f | `01_annotation_vy_register_audit.py`         | Manual QA package for `vy_register` (full polite-singular + stratified true-plural sample) |
-| 02a | `02_modeling_significance_core_contrasts.py` | Two-period confirmatory contrasts + sensitivity |
-| 02b | `02_modeling_q1_per_cell_glm.py`             | **RQ1**: per-cell GLM; co-primary inference file includes Poisson+wild-bootstrap and NB |
+| 02a | `02_modeling_significance_core_contrasts.py` | **Attention Allocation**: closed-denominator binomial on the 1st/2nd-person 4-cell quartet; co-primary lme4 GLMM + Cox conditional logit (legacy `+C(author)` MLE retained as sensitivity only) |
+| 02b | `02_modeling_q1_per_cell_glm.py`             | **Absolute Salience (RQ1)**: per-cell Poisson / NB GLM with `log(exposure)` offset; co-primary inference file includes Poisson+wild-bootstrap and NB |
 | 02b2 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_tokens` | **RQ1 sensitivity**: same script, token offset |
 | 02b3 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_finite_verbs` | **RQ1 sensitivity**: finite-verb offset (requires `00e`) |
 | 02b4 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_finite_verbs_excl_imperative` | **RQ1 sensitivity**: FV offset excluding imperatives |

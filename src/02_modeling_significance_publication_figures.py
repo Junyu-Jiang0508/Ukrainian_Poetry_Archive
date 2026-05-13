@@ -161,6 +161,9 @@ def plot_segmented_heatmap(df: pd.DataFrame, out_dir: Path) -> None:
         .to_numpy(dtype=float)
     )
     q = d.pivot(index="feature", columns="term", values="q_value_bh_within_term").reindex(index=feats, columns=terms)
+    n_bins = None
+    if "n_bins" in d.columns and pd.notna(d["n_bins"]).any():
+        n_bins = int(d["n_bins"].dropna().iloc[0])
     fig, ax = plt.subplots(figsize=(7.5, 4.8))
     vmax = np.nanmax(np.abs(mat)) if np.isfinite(mat).any() else 1.0
     im = ax.imshow(mat, cmap="coolwarm", vmin=-vmax, vmax=vmax, aspect="auto")
@@ -177,10 +180,62 @@ def plot_segmented_heatmap(df: pd.DataFrame, out_dir: Path) -> None:
                 star = "*" if (pd.notna(q.iloc[i, j]) and float(q.iloc[i, j]) < 0.05) else ""
                 txt = f"{v:.2f}{star}"
             ax.text(j, i, txt, ha="center", va="center", color="black", fontsize=9)
-    ax.set_title("Segmented time effects (logit scale)")
+    title = "Segmented ITS effects (logit scale, balanced poem-count bins)"
+    if n_bins is not None:
+        title += f"\nT = {n_bins} bins (~50 poems each); df_resid \u2265 {max(n_bins - 6, 0)}"
+    ax.set_title(title)
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label("Coefficient")
     _save(fig, out_dir, "fig4_segmented_heatmap")
+
+
+def plot_loess_descriptive(df: pd.DataFrame, out_dir: Path) -> None:
+    """Multi-panel LOESS overlays (descriptive companion to ``plot_segmented_heatmap``)."""
+    if df.empty:
+        return
+    feats = ["prop_1st", "prop_2nd", "prop_3rd", "prop_plural", "prop_pro_drop"]
+    feats = [f for f in feats if f in set(df["feature"])]
+    if not feats:
+        return
+    t0_iso = df["date_origin"].iloc[0] if "date_origin" in df.columns else None
+    t0 = pd.Timestamp(t0_iso) if t0_iso else None
+    fig, axes = plt.subplots(len(feats), 1, figsize=(8.4, 1.9 * len(feats) + 0.6), sharex=True)
+    if len(feats) == 1:
+        axes = [axes]
+    for ax, feat in zip(axes, feats):
+        sub = df[df["feature"].eq(feat)].sort_values("t_days")
+        if sub.empty:
+            continue
+        x = sub["t_days"].to_numpy(dtype=float)
+        if t0 is not None:
+            x = np.array([t0 + pd.Timedelta(days=float(d)) for d in x])
+        ax.plot(x, sub["y_smooth"].to_numpy(dtype=float), color="#2c3e50", linewidth=1.5, label="LOESS (frac=0.3)")
+        if {"ci95_low", "ci95_high"}.issubset(sub.columns):
+            ax.fill_between(
+                x,
+                sub["ci95_low"].to_numpy(dtype=float),
+                sub["ci95_high"].to_numpy(dtype=float),
+                color="#2c3e50",
+                alpha=0.18,
+                linewidth=0,
+                label="95% author-cluster bootstrap",
+            )
+        if t0 is not None:
+            ax.axvline(pd.Timestamp("2014-02-20"), color="#7f8c8d", linestyle="--", linewidth=1)
+            ax.axvline(pd.Timestamp("2022-02-24"), color="#c0392b", linestyle="--", linewidth=1)
+        ax.set_ylabel(FEATURE_LABELS.get(feat, feat))
+    axes[-1].set_xlabel("Date posted")
+    fig.suptitle(
+        "LOESS smooth of poem-level proportions (descriptive overlay only;\n"
+        "inference reported in fig4_segmented_heatmap on balanced poem-count bins)",
+        fontsize=11,
+        y=1.02,
+    )
+    # Single legend on the top axis.
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        axes[0].legend(handles, labels, loc="upper left", fontsize=8)
+    _save(fig, out_dir, "fig4b_loess_descriptive")
 
 
 def plot_q1_per_cell_poisson_rr(df_glm: pd.DataFrame, out_dir: Path) -> None:
@@ -293,11 +348,17 @@ def main() -> None:
     st_plural = pd.read_csv(in_dir / "stanza_plural_glm.csv") if (in_dir / "stanza_plural_glm.csv").is_file() else pd.DataFrame()
     st_pn = pd.read_csv(in_dir / "stanza_pn_one_vs_rest_glm.csv") if (in_dir / "stanza_pn_one_vs_rest_glm.csv").is_file() else pd.DataFrame()
     segmented = pd.read_csv(in_dir / "poem_level_segmented_2014_2022.csv") if (in_dir / "poem_level_segmented_2014_2022.csv").is_file() else pd.DataFrame()
+    loess_descr = (
+        pd.read_csv(in_dir / "poem_level_loess_descriptive.csv")
+        if (in_dir / "poem_level_loess_descriptive.csv").is_file()
+        else pd.DataFrame()
+    )
 
     plot_poem_overall(poem_overall, out_dir)
     plot_poem_by_language(poem_lang, out_dir)
     plot_stanza_models(st_plural, st_pn, out_dir)
     plot_segmented_heatmap(segmented, out_dir)
+    plot_loess_descriptive(loess_descr, out_dir)
 
     q1_path = args.q1_glm_csv
     if q1_path is None and DEFAULT_Q1_GLM_CSV.is_file():

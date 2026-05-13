@@ -17,6 +17,27 @@ The corpus divides into three periods defined by critical political junctures:
 
 **Limitation**: The pre-2014 baseline contains only 5 poems (1 adaptive interval), constraining the interpretability of any pre-Euromaidan coefficients. All inferential comparisons focus on the 2014–2021 vs. post-2022 contrast.
 
+**Estimand decoupling.** The two confirmatory inferential stages address
+*different* estimands and are reported in this order:
+
+1. **Absolute Salience (`02b`)** — Per-cell Poisson / NB GLM with offset
+   `log(exposure)`. Estimand: *"Did poets write absolutely more `1pl` (or
+   `2sg`, `2pl`, `1sg`) tokens after 2022, controlling for exposure?"* Cells
+   are independent; the denominator is exposure.
+2. **Attention Allocation (`02a`)** — Closed-denominator binomial on the
+   first/second-person four-cell quartet `{1sg, 1pl, 2sg, 2pl_vy_true_plural}`
+   with `n_12 = sum` as trial total. Estimand: *"Given any change in absolute
+   strength, how was attention reallocated **within** the first/second-person
+   sub-space — between self (`1sg`) and group (`1pl`), and between intimate
+   (`2sg`) and collective (`2pl`)?"* The closed denominator is the natural
+   sample space for the pragmatic-allocation question and **not** a
+   compositional-bias artifact. `02a` is fit as a co-primary combination of
+   (i) a binomial GLMM with random author intercept (`lme4::glmer`) and (ii) a
+   Cox conditional logistic regression, both of which side-step the
+   incidental-parameter bias incurred by an unconditional `+ C(author)` MLE
+   with N ≈ 33 authors and a median of ~20–25 informative poems per
+   author × cell × period.
+
 ---
 
 ### 5.2 Layer 1: Pronoun Proportion Panorama (Breakpoint Regression)
@@ -150,8 +171,8 @@ authoritative stage list. Per-stage artifacts:
 
 | Script | Output Directory | Key Products |
 |--------|-----------------|-------------|
-| `02_modeling_significance_core_contrasts.py` | `outputs/02_modeling_significance_core_contrasts/` | Two-period confirmatory contrasts, sensitivity tables |
-| `02_modeling_q1_per_cell_glm.py` | `outputs/02_modeling_q1_per_cell_glm/` | Per-cell GLM tables (`q1_*.csv`), poem & stanza levels |
+| `02_modeling_significance_core_contrasts.py` | `outputs/02_modeling_significance_core_contrasts/` | **Attention Allocation** (closed 4-cell quartet): co-primary lme4 GLMM + Cox conditional logit, legacy `+C(author)` MLE as sensitivity, wild-cluster bootstrap |
+| `02_modeling_q1_per_cell_glm.py` | `outputs/02_modeling_q1_per_cell_glm/` | **Absolute Salience** (per-cell Poisson / NB with `log(exposure)` offset), co-primary with wild-cluster bootstrap |
 | `02_modeling_q2_hierarchical.py` | `outputs/02_modeling_q2_hierarchical/` | Hierarchical random-slope summaries (`q2_*.csv`) |
 | `02_modeling_significance_models.py` | `outputs/02_modeling_significance_models/` | Inferential model tables for pronoun shifts |
 | `02_modeling_significance_publication_figures.py` | `outputs/02_modeling_significance_publication_figures/` | Publication PNG/PDF figures |

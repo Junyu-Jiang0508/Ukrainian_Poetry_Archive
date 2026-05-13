@@ -21,6 +21,7 @@ conditional likelihood; the diagnostics table records these drops.
 
 from __future__ import annotations
 
+import sys
 import warnings
 from dataclasses import dataclass
 
@@ -28,6 +29,16 @@ import numpy as np
 import pandas as pd
 from patsy import dmatrix
 from statsmodels.discrete.conditional_models import ConditionalLogit
+
+
+# statsmodels' ConditionalLogit was designed for small matched-case-control strata
+# (typically 1:N with N <= 10). When applied to author-level grouping with the
+# ~1000 expanded Bernoulli trials per stratum that arise from this corpus, the
+# internal partition-function computation recurses linearly in stratum size and
+# triggers ``RecursionError: maximum recursion depth exceeded in comparison`` at
+# Python's default limit of 1000. We pre-emptively raise the limit during the
+# ``.fit()`` call and restore it afterwards.
+_RECURSION_LIMIT_OVERRIDE = 50_000
 
 
 CONDITIONAL_LOGIT_FORMULA = (
@@ -105,18 +116,30 @@ def fit_conditional_logit(long_df: pd.DataFrame) -> ConditionalLogitResult:
             convergence_status="no_data_after_filter",
         )
 
-    # period3 encoded with P1_2014_2021 as the reference; force categorical order.
+    # period3 encoded with P1_2014_2021 as the reference; unordered categorical so
+    # patsy uses Treatment contrasts (term name ``period3[T.P2_2022_plus]``) rather
+    # than the polynomial ``period3.L`` coding implied by an ordered factor.
     trials["period3"] = pd.Categorical(
-        trials["period3"], categories=["P1_2014_2021", "P2_2022_plus"], ordered=True
+        trials["period3"], categories=["P1_2014_2021", "P2_2022_plus"], ordered=False
     )
+
+    # Sort by author so the within-stratum slices statsmodels iterates over are
+    # contiguous; this also makes the recursion depth deterministic for any
+    # given stratum size.
+    trials = trials.sort_values("author", kind="mergesort").reset_index(drop=True)
 
     design = dmatrix(CONDITIONAL_LOGIT_FORMULA, data=trials, return_type="dataframe")
     endog = trials["y"].to_numpy(dtype=int)
     groups = trials["author"].astype(str).to_numpy()
 
+    original_recursion_limit = sys.getrecursionlimit()
+    largest_stratum = int(pd.Series(groups).value_counts().max()) if len(groups) else 0
+    target_limit = max(original_recursion_limit, largest_stratum * 4 + 5_000, _RECURSION_LIMIT_OVERRIDE)
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         try:
+            sys.setrecursionlimit(target_limit)
             fit = ConditionalLogit(endog, design, groups=groups).fit(disp=False, method="bfgs")
             status = "converged"
         except Exception as exc:  # noqa: BLE001
@@ -129,6 +152,8 @@ def fit_conditional_logit(long_df: pd.DataFrame) -> ConditionalLogitResult:
                 dropped_authors=dropped,
                 convergence_status=f"fit_error: {exc}",
             )
+        finally:
+            sys.setrecursionlimit(original_recursion_limit)
 
     params = pd.Series(fit.params, index=design.columns).astype(float)
     cov = pd.DataFrame(fit.cov_params(), index=design.columns, columns=design.columns).astype(float)

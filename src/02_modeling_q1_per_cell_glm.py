@@ -1,4 +1,15 @@
-"""Q1: first/second-person per-cell period shift (poem level, language strata).
+"""Absolute Salience per-cell GLM (Q1): first/second-person period shift.
+
+Estimand
+--------
+This stage answers the **Absolute Salience** question: did poets write
+*absolutely* more ``1pl`` (or ``2sg``, ``2pl``, ``1sg``) tokens after 2022,
+controlling for exposure? Each cell is modelled independently with a Poisson /
+NB GLM and offset ``log(exposure_n_stanzas)`` (with token / finite-verb
+exposure sensitivity sweeps). The denominator is exposure, **not** the other
+pronouns. This estimand is intentionally distinct from the **Attention
+Allocation** estimand answered by ``02_modeling_significance_core_contrasts.py``
+(closed-denominator binomial on the four-cell first/second-person quartet).
 
 Per-cell Poisson GLM among the four frequentist cells (PRIMARY_GLM_CELLS_FREQUENTIST):
 ``1sg, 1pl, 2sg, 2pl_vy_true_plural`` with offset ``log(exposure_n_stanzas)``.
