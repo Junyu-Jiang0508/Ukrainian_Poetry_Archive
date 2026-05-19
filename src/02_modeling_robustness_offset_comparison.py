@@ -20,9 +20,11 @@ log = logging.getLogger(__name__)
 DEFAULT_Q1_DIR = ROOT / "outputs" / "02_modeling_q1_per_cell_glm"
 DEFAULT_OUT = ROOT / "outputs" / "02_modeling_robustness_offset_comparison"
 
+# Post-P0-3: primary offset is n_tokens (writes the unsuffixed filename). Stanza
+# offset is a sensitivity and now writes a suffixed name. FV variants unchanged.
 OFFSET_FILES: tuple[tuple[str, str], ...] = (
-    ("n_stanzas", "q1_poem_per_cell_glm_by_language.csv"),
-    ("n_tokens", "q1_poem_per_cell_glm_by_language_offset_n_tokens.csv"),
+    ("n_tokens", "q1_poem_per_cell_glm_by_language.csv"),
+    ("n_stanzas", "q1_poem_per_cell_glm_by_language_offset_n_stanzas.csv"),
     ("n_finite_verbs", "q1_poem_per_cell_glm_by_language_offset_n_finite_verbs.csv"),
     (
         "n_finite_verbs_excl_imperative",

@@ -1,0 +1,329 @@
+% interactcadsample.tex
+% v1.03 - April 2017
+
+\documentclass[12pt]{interact}
+\usepackage{fix-cm}
+\usepackage{fontspec}
+\setmainfont{Latin Modern Roman}
+
+\usepackage{graphicx}% For including graphics
+\usepackage{subfigure}% Support for small, `sub' figures and tables
+%\usepackage[nolists,tablesfirst]{endfloat}% To `separate' figures and tables from text if required
+\usepackage{polyglossia}
+\setmainlanguage{english}
+\setotherlanguage{ukrainian}
+\newfontfamily\ukrainianfont{FreeSerif}
+
+\usepackage{natbib}% Citation support using natbib.sty
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  citecolor=blue,
+  linkcolor=blue,
+  urlcolor=blue,
+  filecolor=blue
+}
+\bibpunct[, ]{(}{)}{;}{a}{}{,}% Citation support using natbib.sty
+\renewcommand\bibfont{\fontsize{10}{12}\selectfont}% Bibliography support using natbib.sty
+
+\theoremstyle{plain}% Theorem-like structures provided by amsthm.sty
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{proposition}[theorem]{Proposition}
+
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+\newtheorem{notation}{Notation}
+\usepackage{microtype}
+\PassOptionsToPackage{hyphens}{url}
+\urlstyle{same}
+\renewcommand{\UrlFont}{\rmfamily}
+
+\begin{document}
+
+\articletype{Capstone Project}
+
+\title{Speaking We in Wartime: Pronominal Deixis and National Address in Ukrainian Facebook Poetry, 2014–2025}
+
+\author{
+\name{Junyu Jiang\textsuperscript{a}and Amelia Glaser\textsuperscript{b}}
+\affil{\textsuperscript{a}M.S. Computational Social Science, UC San Diego; \textsuperscript{b}Professor in Literature Department, UC San Diego}
+}
+
+\maketitle
+
+\begin{abstract}
+This paper tests whether first- and second-person pronominal deixis is reorganized within Ukrainian and Russian-language poets across the 24~February 2022 cutpoint. The analytic corpus comprises 1{,}601 Facebook poems by 105 authors (2014--2025), drawn from the Contemporary Ukrainian Poetry Archive and stratified by Ukrainian- and Russian-language strata. We distinguish two estimands: \emph{attention allocation}, the within-author redistribution of pronominal choice across the closed first/second-person quartet $\{$1sg, 1pl, 2sg, 2pl$\}$ (primary); and \emph{absolute salience}, the per-token rate at which each cell appears in the text irrespective of competition (secondary). Attention allocation is estimated by a binomial GLMM with random author intercept and corroborated by a Chamberlain conditional logit, both of which avoid the incidental-parameter bias that the unconditional author-dummy MLE incurs at $N \approx 33$ informative authors. Absolute salience is estimated by per-cell Poisson and Negative Binomial GLMs with token-count exposure offsets. Benjamini--Hochberg false-discovery-rate correction is applied within each language stratum. We find a robust within-author reallocation: the second-person-singular and first-person-plural cells lose share to the second-person-plural and first-person-singular cells (OR$_{\text{person}\times\text{number}} = 1.77$, 95\% CI $1.36$--$2.30$, $p < 10^{-4}$), with no detectable absolute-rate change in any individual cell. The shift is robust to leave-one-author-out resampling, to dropping pre-2014 poems, and to switching between token, stanza, and finite-verb exposure offsets.
+\end{abstract}
+
+\begin{keywords}
+Ukrainian Contemporary Poetry; Digital Humanities; Wartime Discourse; Pronominal Deixis; Within-Author Design
+\end{keywords}
+
+\section{Introduction}
+
+On 24 February 2022, Russia's full-scale invasion of Ukraine triggered a born-digital iteration of a longer tradition of literature written under bombardment. Within days of the first missile strikes on Kyiv, poets were publishing short verse to their Facebook pages; within weeks, that flow had constituted what \citet{glaser2024poetry} reads as an ongoing public conversation among writers, readers, and editors. The Contemporary Ukrainian Poetry Archive \citep{glaser2024archive} now preserves this record. Much of the scholarship on resistance literature reads such writing as a discourse of national self-constitution rather than private lyric \citep{ilchuk2017hearing, maksymchuk2017words}. The Ukrainian case is unusual less in the writing than in its survival: a dated, machine-readable archive that admits statistical measurement at the scale of individual authors.
+
+We focus on pronominal deixis: the grammatical means that position speaker, addressee, and adversary in social and political space. Critical linguistics treats these forms not as referential conveniences but as a principal grammatical site at which speech acts are tied to social and personal identities \citep{muhlhausler1990pronouns}. \citet{billig1995banal} extends the claim: routine, unreflective uses of we and our continually flag, and thereby reproduce, the nation as an imagined community \citep{anderson2006imagined}. Slavic first-person plurals carry further referential load — the inclusive/exclusive distinction is typologically variable and pragmatically loaded \citep{cysouw2003the, filimonova2005clusivity, helmbrecht2002grammar}, but is not morphologically marked in Ukrainian \ukrainianfont{ми} or Russian мы and must be inferred from context. The present study brackets that inferential layer and analyzes surface person–number marking only; referent-level disambiguation, including the inclusive/exclusive contrast and the politically loaded second person, is reserved for a subsequent phase of this project.
+
+We focus on two main research questions.
+
+\textbf{RQ1 (primary, attention allocation):} Within the closed first/second-person quartet $\{$1sg, 1pl, 2sg, 2pl$\}$, do within-author probabilities of selecting each cell shift across the 24~February 2022 cutpoint? Posed against this closed denominator, the question asks how the speaker, when placing themselves on the addresser--addressee grid \emph{at all}, redistributes attention between self (1sg) and group (1pl), and between intimate (2sg) and collective (2pl). We treat each poet as their own control to remove between-author confounding and scope the inference to a well-defined intervention \citep{Hernn2016}: the cutpoint, not the war as a diffuse cause.
+
+\textbf{RQ2 (secondary, absolute salience):} Conditional on the attention reallocation, does any individual cell rise or fall in \emph{absolute} rate per unit of text? This is the discipline-mandated complement to RQ1: a proportional shift within a closed sub-space can reflect either a rise in the focal cell or a fall in its competitors, and only joint reading separates the two. We model each cell independently with a Poisson / Negative Binomial GLM and a log-token exposure offset.
+
+\textbf{RQ3 (author heterogeneity):} How is the attention reallocation distributed across individual authors: do poets who write through the cutpoint move in the same direction, or does any corpus-level effect mask heterogeneous or countervailing trajectories?
+
+We move from a curated record of what poets wrote to within-author statistical estimates of how their grammatical address was reorganized, with exposure offsets, multiple-testing correction, and pre-registered sensitivity specifications.
+
+\section{Literature Review}
+
+\subsection{Pronouns as Political Grammar}
+
+The pragmatic and critical-linguistic tradition has built a concrete analytic apparatus on the foundational recognitions, foregrounded in the Introduction, that pronouns are the principal grammatical site of identity work \citep{muhlhausler1990pronouns} and that routine deictic flagging continually reproduces the nation in unmarked discourse \citep{billig1995banal}. \citet{wilson1990politically} provides the political-pragmatic analysis of how speakers manipulate \emph{we} and \emph{they} to assign responsibility, signal solidarity, and define alignments. This polarization, formalized as the ideological square \citep{vanDijk2011}, surfaces in the distribution of first- and third-person plural pronouns across political genres. The implication for pronoun-level inference is that observable shifts in 1PL frequency mark movement in the discursive boundary between in-group and out-group rather than stylistic preference.
+
+Several operational frameworks make these claims tractable for corpus analysis. The Deictic Space Model \citep{chilton2004analysing} anchors space, time, and modality in the speaker's deictic center and the in-group \emph{we}, producing analyzable axes of us-here-now versus them-there-then that apply directly to wartime verse whose enemy is geographically and morally distal. The Discourse-Historical Approach \citep{wodak2009the} formalizes referential, predicational, and perspectivation strategies through which national sameness and difference are constructed, with pronominal deixis as the prototypical referential resource. Legitimization discourse, in \citet{reyes2011strategies}, deploys the same pronominal positioning of us-victims against them-threat. \citet{petersoo2007what} demonstrates that the deictic center of national \emph{we} routinely oscillates among multiple referents within a single text, the so-called ``wandering we,'' and \citet{fina1995pronominal} models how pronominal choice indexes identity and solidarity in political discourse, providing an analytic template adaptable to the persona work of wartime poetry. A separate cross-linguistic literature establishes that 1PL inclusivity is grammatically marked in some languages but pragmatically inferred in Ukrainian and Russian \citep{cysouw2003the, filimonova2005clusivity, helmbrecht2002grammar}; the present study, as set out in the Introduction, brackets this referent-level inference as a deferred concern. These frameworks specify how 1PL and 2P forms can be read as coordinates in a discursive field rather than as countable surface tokens, but they do not specify whose discursive field; the historical specificity of the Ukrainian case, taken up next, gives that referent its content.
+
+\subsection{Ukrainian Identity as Discursive Event}
+
+Brubaker's program reframes ethnic and national identity as variable, contingent process rather than as primordial group, which licenses reading pronoun choice as nation-making rather than nation-describing. Nationalism Reframed \citep{brubaker1996nationalism} introduces the triadic nexus of nationalizing state, national minority, and external homeland that has structured subsequent analyses of post-Soviet Ukrainian–Russian relations. ``Beyond Identity'' \citep{brubaker2000beyond} disaggregates the conceptual mass of identity into identification, self-understanding, and commonality, arguing that the term reifies what should be analyzed as process. Ethnicity Without Groups \citep{brubaker2004ethnicity} consolidates the move: groupness is a variable, contingent event, an achievement of categorization, mobilization, and discursive practice. The cognitive-linguistic version of this argument \citep{brubaker2004ethnicity1} recasts ethnicity, race, and nation as schemas through which actors parse experience, which warrants treating pronoun choice as an observable trace of category activation. The implication for the present analysis is that within-author variation in pronoun rates is not noise around a stable identity but the unit of observation through which nation-making becomes empirically visible.
+
+The Ukrainian record empirically instantiates this program. Ukrainian nationhood is documented as a contested cultural construct rather than a primordial group, with ethno-nationalism a minority faith among the titular nationality through the 1990s \citep{wilson1997ukrainian, wilson2000the}. \citet{kulyk2001the} imports the Brubakerian framework into Ukrainian studies, critiques its majority/minority assumption, and theorizes Ukrainian nationhood as discursive practice in post-Soviet ethnopolitics; \citet{kulyk2016national, kulyk2018shedding} document that the very content of being Ukrainian shifted after 2014, with ethnonational identifications recast rather than merely activated. The implication for pronoun-level inference is that the referent of a Ukrainian poet's \emph{we} cannot be assumed stable across the 2014–2025 window; it is itself the object of contestation. If the construction of identity is contested, the next question is whether the contested categories are also internally multidimensional and time-varying, which is what motivates a within-author rather than cross-sectional research design.
+
+Identification is in fact multidimensional and time-varying. \citet{onuch2018capturing} decompose ethnicity into four measurable dimensions and show that substantive conclusions depend critically on which is used. Civic and ethnolinguistic identifications move independently, and mixed identifications often persist along the contact line \citep{popeleches2018identity, sasse2018war}. The predictive power of ethnolinguistic categories itself varies over time \citep{kulyk2022imperfect}, and the civic Ukrainian nation can be read as a generational, performative achievement crystallized under invasion \citep{onuch2022the}. The implication for the present analysis is that any cross-sectional comparison would conflate within-author identification shift with between-author selection on a moving identification baseline; only a within-author design isolates the period effect from the heterogeneity these studies document.
+
+The sociolinguistic backdrop against which the poetic corpus is produced is the immediate context for any inference about pronominal address. \citet{bilaniuk2005contested, bilaniuk2010language} provides an influential ethnographic account of Ukrainian–Russian bilingualism and the politics of non-accommodation that prevailed before 2014. The post-2022 language shift, documented in \citet{kulyk2024language}, records a near-unprecedented abandonment of Russian in everyday Ukrainian life. Connective strategic narratives circulating during the war are traced in \citet{popova2024russia}, and \citet{plokhy2021the} grounds these contemporary contests in the longue durée of Ukrainian state formation. The implication for the present analysis is that a Ukrainian-language poetic corpus during 2014–2025 cannot be read against a stable linguistic baseline; the language of composition is itself part of what is shifting.
+
+Three caveats are required before this identification record can ground inference about poetic grammar. First, the survey-based studies just reviewed \citep{kulyk2016national, onuch2018capturing, kulyk2022imperfect} measure population-level identifications, not the grammatical practice of writers; poets are not a representative sample of the surveyed population, and no claim of demographic generalizability is intended here. Second, on the reading developed by \citet{glaser2024poetry}, Facebook poetry in this period is circulating public discourse rather than individualized lyric record. Poets in this archive function as self-selected articulators of the national discursive field, addressed to and recirculated within networked publics, and their pronoun choices are accordingly more informative about that collective field than a representative corpus would be, not less, because they are produced under explicit discursive accountability. Third, the inference that an identification shift will leave traces in routine pronominal practice is not borrowed from Brubaker's framework but is a first-order implication of \citet{billig1995banal} and \citet{petersoo2007what}: if banal national \emph{we}-flagging is itself a sensitive marker of sociopolitical context, then the post-2014 and post-2022 windows are exactly where routine pronominal practice should register the shift. This is the present paper's own inferential move, defended here so it can be tested against the wartime poetic record taken up in the next subsection.
+
+\subsection{Ukrainian Wartime Poetry as Political Discourse}
+
+A dedicated body of scholarship on Ukrainian wartime poetry has crystallized since 2014 and accelerated after 2022. \citet{ilchuk2017hearing} provides the first major anglophone study of literary and artistic responses to the Donbas war, showing how Zhadan and others reshape regional identity into civic Ukrainian community through verse and prose. The \emph{Words for War} anthology \citep{maksymchuk2017words} positions post-2014 Ukrainian verse as national self-constitution and is widely cited as such. A complementary theoretical project, Songs in Dark Times \citep{Glaser2020}, models how minority-language poets construct cross-ethnic solidarity through verse, and \citet{glaser2023mine} traces how contemporary Ukrainian poets interweave Holodomor, Holocaust, and Crimean Tatar deportation memories into a civic-pluralist Ukrainian identity. The Russophone case is taken up by \citet{kukulin2017the, kukulin2024writing} and \citet{parts2024in}, who map how poets writing in the language of the aggressor reposition the speaking I against the Russian state, and \citet{blacker2019memory} situates analogous literary memory work in post-trauma East Central European cities. This scholarship reads contemporary Ukrainian verse against an established mnemonic register in which war reorganizes a national literary corpus and inherited trauma is restaged in present-war address \citep{fussell2013the, hirsch2012the}, with adjacent treatments of mourning ritual, unclaimed experience, and communicative memory \citep{winter1995sites, caruth1996unclaimed, assmann1995collective}. The implication for the present study is that this analytic tradition has produced rich qualitative readings of what wartime Ukrainian poetry does at the thematic and mnemonic level but has not produced statistical estimates of what its grammar does.
+
+The direct empirical precursor to the present study is \citet{glaser2024archive}, which applies distant reading to the Contemporary Ukrainian Poetry Archive and tracks shifts in topic and lexical content across the period. That work establishes the corpus as analytically tractable but leaves three openings the present paper takes up. It does not analyze person–number pronouns as a structured grammatical inventory. It does not implement a within-author design that uses each poet as their own control. And it does not carry out hypothesis testing with multiple-comparison correction across pronoun cells. RQ1 and RQ2 are aimed precisely at these openings: RQ1 estimates corpus-level within-author period effects on first- and second-person rates with each poet serving as their own control, and RQ2 disaggregates that effect into individual-author trajectories rather than treating the corpus mean as the unit of substantive interest. The publication and circulation environment that licenses reading these poems as public discourse rather than private record is the focus of the next subsection.
+
+\subsection{Digital Circulation and Networked Poetic Publics}
+
+Ukrainian wartime poetry in the period under study is not a print phenomenon that happens to appear online; it is a born-digital genre whose form, audience, and afterlife are conditioned by the affordances of Facebook and Telegram. The post-2014 Ukrainian poetic record, on \citet{benkler2018network}'s account of the networked public sphere and commons-based peer production, is non-market, peer-circulated cultural output. The standard inventory of networked-publics affordances, including persistence, replicability, scalability, and searchability \citep{papacharissi2015affective}, explains how a poem produced in 2014 can be recirculated as an anthem-like text ten years later with shifting deictic referents. \citet{papacharissi2015affective} further theorizes viral expressions as accumulating into networked structures of feeling, an influential model for reading Ukrainian wartime poems as affective publics constituted through share and translation chains. The implication for measurement is that an individual poem's pronoun pattern is not a private compositional fact but a contribution to a circulating public.
+
+The scholarship on Ukrainian digital activism specifies the political context in which these poetic publics operate. \citet{onuch2022the} corrects technologically deterministic accounts of Euromaidan by showing that mobilization was facilitated, not caused, by social media, which is a check on any claim that viral wartime poetry, on its own, generates offline solidarity. \citet{lokot2018iamnotafraidtosayi, lokot2021beyond} documents how short, first-person, affective testimonial posts on Ukrainian social media constitute networked counter-publics, and theorizes ``augmented dissent,'' in which digital and physical protest spaces are co-constituted. \citet{boichak2020between} links the construction of a ``We Ukrainians'' collective identity on social media to wartime mobilization in the Donbas, and ``participatory warfare,'' coined in \citet{boichak2022mapping}, captures the continuous civilian and frontline production, sharing, and translation of texts on smartphones, mapping the diasporic national web through which Ukrainian cultural content recirculates transnationally. The implication for the present analysis is that the corpus is not a sample of private utterances but a slice of a large, circulating, networked public discourse, which is what makes pronoun-level patterns interpretable as marks of collective discursive practice rather than authorial idiosyncrasy.
+
+Across the four bodies of scholarship just reviewed, the same configuration recurs: pronominal deixis is established as an analytically tractable site of identity work; Ukrainian national identification is documented as multidimensional and time-varying across the 2014–2025 window; the wartime poetic record has been read qualitatively as a vehicle of national self-constitution; and Facebook-distributed verse is circulated through networked publics that license its treatment as collective discourse. What none of this work has yet established is whether the within-author rates of first- and second-person pronouns in that poetic corpus actually move across the 24 February 2022 cutpoint. If they do move, it is also unsettled whether they move uniformly across poets or in author-specific directions that a corpus mean would mask. RQ1 takes up the corpus-level question by estimating within-author period effects on first- and second-person singular and plural rates, with each poet serving as their own control to remove between-author confounding. RQ2 takes up the heterogeneity question by estimating author-specific trajectories in a partially pooled hierarchical model and asking whether any corpus-level shift is shared, attenuated, or reversed at the individual level. The remainder of the paper specifies the corpus, the annotation procedure that resolves Ukrainian pro-drop, and the estimand and inferential architecture under which these two questions are tested.
+
+\section{Methods}
+
+\subsection{Corpus and Data Source}
+
+The corpus consists of the public-list subset of the Contemporary Ukrainian Poetry Archive \citep{glaser2024archive}, comprising 1,601 poems by 105 authors and spanning the period 2013–2025. A two-layer filtering pipeline separates poem-level metadata from stanza-level records; reposts and translations are flagged at the metadata layer and excluded from all inferential analyses. The corpus is stratified by language: Ukrainian-language poems form the primary stratum for multiple-comparison correction, Russian-language poems are analyzed as a secondary stratum, and Crimean Tatar / Qirimli poems are excluded from the count models on grounds of grammatical non-comparability with the Slavic person–number system. After filtering, the inferential dataset comprises 22,635 stanza-level records, each carrying author, composition year, and exposure metadata.
+
+\subsection{Period Coding}
+
+
+The primary period variable is derived from composition year and coded as a three-way factor. The pre-Euromaidan window (before 2014) contains only 5 poems and is retained as a descriptive baseline; it does not enter confirmatory inference. The post-Euromaidan / pre-invasion window (2014–2021) contains 859 poems and 12,475 stanzas and serves as the reference period for all contrasts. The full-scale invasion window (2022 onward) contains 709 poems and 9,651 stanzas. A separate robustness specification recodes period using posting date with a binary cutoff at 24 February 2022. Because composition year and posting date are conceptually distinct denominators: one indexes when a poem was written, the other when it entered public circulation. This specification is reported as an alternate estimand rather than a same-estimand sensitivity check.
+
+\subsection{Pronoun Annotation via Shakespearean English Translation}
+
+The methodologically central problem is that Ukrainian is a null-subject language: subject pronouns are grammatically optional and are routinely omitted when recoverable from verb morphology. First- and second-person subjects, which are precisely the forms of interest for this study, are the most frequently dropped. A naive count of explicit pronoun tokens like obtaining by regular-expression matching or by spaCy morphological parsing will therefore systematically undercount pronoun usage, and the magnitude of that undercount almost certainly varies across periods, authors, and registers in ways that would bias any pre/post contrast. Surface tokenizers see only what is on the page; they cannot recover the implicit subjects that Ukrainian verb morphology licenses.
+
+To resolve this, each stanza is submitted to GPT-4o-mini via asynchronous batch processing under a structured two-step prompt. Step one translates the stanza into Shakespearean English (dost, hath, art, and so on), rendering every pro-dropped subject explicitly as its inferred pronoun. A strict second-person mapping is enforced before translation, which ensuring to preserve the singular–plural distinction encoded by the Ukrainian T–V system, including polite-singular {\ukrainianfont {\ukrainianfont ви}}, which always maps to ye/you/your and never to thou. Pro-dropped subjects appear as explicit tokens in the Shakespearean output and are never left as placeholders. Step two identifies every personal pronoun in the translation and records, for each, person (1st, 2nd, 3rd, Impersonal), morphological number (Singular, Plural), a field for {\ukrainianfont ви}-forms distinguishing genuine plural from polite singular, and a Boolean output to indicate whether the source subject was absent and inferred from verb morphology.
+
+Shakespearean English is chosen for two converging reasons. Its archaic pronoun inventory provides a near one-to-one mapping for the Ukrainian T–V distinction that Modern English lacks, and its obligatory explicit subjects resolve the pro-drop problem by construction, without requiring a separate parsing pass. Translation and annotation are thereby unified into a single LLM call rather than chained across heterogeneous tools. We also conduct a stratified human review of 200 stanzas validated person and number accuracy for the primary cells used in inference. GPT-4o-mini additionally returns a Shakespearean translation segment field used for auditing.
+
+\subsection{Pronoun Cell Construction}
+
+The unit of analysis is the stanza, classified by person and number into the six categories standard in Ukrainian descriptive grammar — first- and third-person forms in singular and plural, and second-person forms in singular and plural. The second-person plural requires further disambiguation, because Ukrainian {\ukrainianfont ви} does double duty: it addresses a genuinely collective interlocutor, but it is also the polite-singular form used for a single respected addressee. Conflating the two would erase a register distinction central to the analysis of wartime address, so the annotation protocol separates true-plural from polite-singular uses.
+
+The frequentist rate regressions for RQ1 are estimated over four cells: first-person singular, first-person plural, second-person singular, and true-plural {\ukrainianfont ви}. Polite-singular {\ukrainianfont ви} is excluded from these models on identification grounds. The corpus contains only 23 polite-singular tokens, distributed across 18 poems and 13 authors, of whom only three appear in both the pre-2022 and post-2022 periods; the resulting design produces near-complete separation under maximum likelihood, and neither the period coefficient nor its standard error is interpretable. The cell is retained in the Bayesian hierarchical model for RQ2, where partial pooling toward the corpus-wide intercept yields stable posterior estimates despite the sparsity.
+
+The rate denominator is not innocuous in poetic text, where stanza length, sentence count, and finite-clause count diverge both from prose norms and from one another. The primary models use the log of poem-level token count as an exposure offset. Three sensitivity analyses substitute alternative denominators — stanza count, total finite-verb count obtained from Stanza morphological parsing, and finite-verb count with imperatives removed — to verify that the period contrasts in RQ1 do not depend on the choice of offset.
+
+\subsection{Estimand Architecture: Two Distinct Confirmatory Questions}
+
+We separate two inferential targets rather than collapse them into one test.
+The first, Attention Allocation (Stage 02a, \emph{primary}), asks how poets
+redistribute address within the closed first- and second-person space
+$\{$1sg, 1pl, 2sg, 2pl$\}$; the denominator is the per-poem sum across the
+four cells. The second, Absolute Salience (Stage 02b, \emph{secondary}),
+asks whether poets produce more first-person-plural tokens per unit of
+text after 2022, and similarly for 2sg, 2pl, and 1sg; we model each cell
+independently with token count as the denominator rather than the count
+of other pronouns.
+
+The closed denominator is not a compositional artifact. Attention
+Allocation poses a question about pragmatic stance --- how often the
+speaker picks ``I'', ``we'', ``you-singular'', or ``you-plural'' when
+placing themselves on the addresser--addressee grid at all --- and the
+relevant sample space is the set of such placements, not the set of all
+words a poet could write. This is the locus at which the deictic-space
+\citep{chilton2004analysing}, ideological-square \citep{vanDijk2011}, and
+``wandering we'' \citep{petersoo2007what} traditions locate the political
+work of pronouns: positional rather than absolute. We therefore report
+Attention Allocation first and read Absolute Salience against it, because
+a proportional shift within a closed sub-space could in principle reflect
+either a rise in the focal cell or a fall in its competitors, and only
+the joint reading separates these mechanisms; Absolute Salience supplies
+the discipline that prevents reading a within-quartet reweighting as a
+general turn toward first-person-plural address.
+
+\subsection{Statistical Models}
+
+\subsubsection{Attention Allocation (RQ1, primary): Closed-Denominator Binomial GLMM and Conditional Logit}
+
+We model the within-quartet binary outcome ``does this token fall in the focal
+cell?'' as a binomial GLMM with random author intercept, fit by
+\texttt{lme4::glmer} \citep{bates2015lme4} through the Python--R bridge in
+\texttt{src/utils/r\_glmm\_runner.py}. The fixed-effect design
+$y \sim \text{person} \times \text{number} \times \text{period3} + (1 \mid \text{author})$
+yields the three pre-registered contrasts: the period main effect on each
+cell ($\text{1pl}$, $\text{2sg}$ shift parameters) and the
+person~$\times$~number~$\times$~period three-way interaction that captures
+the joint reweighting of the four-cell quartet across the cutpoint.
+
+We complement the GLMM with a Chamberlain conditional logit
+\citep{chamberlain1980analysis} that conditions on the within-author sum of
+successes and thereby drops the author intercept by sufficiency. Conditional
+logit is fit via R's \texttt{survival::clogit} (Cox partial-likelihood C
+implementation) through the Python--R bridge in
+\texttt{src/utils/r\_clogit\_runner.py}. The two specifications are co-primary:
+we require both to agree on sign and significance for any contrast we report
+as confirmatory. The legacy unconditional MLE with $+C(\text{author})$ fixed
+effects is retained as a sensitivity-only baseline; at $N \approx 33$
+informative authors with median 20--25 within-author~$\times$~cell~$\times$~period
+poems it is subject to incidental-parameter bias of order $O(1/T)$.
+
+Within each language stratum, we control the false discovery rate across the
+three pre-registered attention contrasts at $\alpha = 0.05$ via
+Benjamini--Hochberg. We then run leave-one-author-out, drop-pre-2014, and
+roster-threshold sensitivities to verify that no single poet or cohort drives
+the corpus-level estimate.
+
+\subsubsection{Absolute Salience (RQ2, secondary): Per-Cell Poisson and Negative-Binomial GLM}
+
+We model counts at the poem-by-cell level with a log link and a
+log-exposure offset, fitting each of the four primary cells independently.
+The primary exposure (post-P0-3 revision) is token count; sensitivity sweeps
+substitute stanza count, finite-verb count, and finite-verb count with
+imperatives removed.
+
+For each cell we run two co-primary specifications: a Poisson GLM with
+cluster-robust standard errors on the author, augmented by wild-cluster
+bootstrap p-values (1{,}999 resamples, Rademacher weights), and a
+negative-binomial GLM with cluster-robust standard errors. We require both
+to agree on the sign and significance of the period effect before we treat
+the result as confirmatory. Within each language stratum, we control the
+false discovery rate across the four primary cells at $\alpha = 0.05$ via
+Benjamini--Hochberg. We then run a specification-curve analysis that varies
+exposure type, period coding, and author-filter threshold across plausible
+combinations, with Romano--Wolf step-down for joint inference across specs,
+and we report the full distribution of period effects rather than a single
+preferred slice.
+
+\subsubsection{Author Heterogeneity (RQ3): Hierarchical Random-Slope Model}
+
+We estimate author-specific trajectories with a negative-binomial
+hierarchical model carrying random slopes on the period indicator, fit in
+Bambi on a PyMC backend. We retain all five cells in this model, including
+polite-singular {\ukrainianfont ви}. The justification is not that
+Bayesian estimation manufactures information where there is none; it is
+that partial pooling toward the corpus-wide intercept and slope stabilizes
+the marginal posterior for sparse authors, where a per-author frequentist
+fit would be undefined or extremely noisy. The same identification
+property is what licenses keeping polite-singular {\ukrainianfont ви} in
+RQ3 after we drop it from the frequentist RQ1 and RQ2 paths.
+
+We summarize author-level results by the posterior probability of
+direction, $\Pr(\delta_i > 0 \mid \text{data})$, rather than by whether
+the highest-density interval excludes zero. With on the order of 33
+informative authors per cell after the roster freeze, the family of
+simultaneous direction statements is large enough to require multiplicity
+control; we apply a BH-style $q_{\text{direction}}$ across authors within
+each cell.
+
+\subsection{Descriptive Layer: Temporal Binning and Breakpoint Regression}
+
+Two descriptive devices accompany the confirmatory models. Neither does
+inferential work — both exist to render the temporal field that the
+confirmatory models compress into a binary period contrast.
+
+We partition 2013–2025 into 35 adaptive intervals with a floor of 30 poems
+per bin. Adaptive widths matter here because poem density is sparse before
+2022 and dense after; fixed-width bins would produce noisy early estimates
+and over-resolved late ones at the same nominal resolution. We then fit
+piecewise weighted least squares to the per-bin means, weighting by poem
+count, with knots placed a priori at 2014 and 2022 — the two political
+junctures the substantive argument turns on. To check those knots against
+the data, we run PELT change-point detection on the unbinned time series. Agreement between PELT's detected change points and the theory-driven knots corroborates the descriptive narrative; substantial disagreement would be a reason to revisit it.
+
+
+\section{Results}
+
+
+\section{Discussions}
+
+\section{Conclusions}
+
+\section{Limitations}
+
+\section*{Acknowledgment}
+
+An unnumbered section, e.g.\ \verb"\section*{Acknowledgements}", may be used for thanks, etc.\ if required and included \emph{in the non-anonymous version} before any Notes or References.
+
+
+\section*{Disclosure statement}
+
+An unnumbered section, e.g.\ \verb"\section*{Disclosure statement}", may be used to declare any potential conflict of interest and included \emph{in the non-anonymous version} before any Notes or References, after any Acknowledgments and before any Funding information.
+
+\bibliographystyle{tfcad}
+\bibliography{reference}
+
+\section{Appendices}
+
+Any appendices should be placed after the list of references, beginning with the command \verb"\appendix" followed by the command \verb"\section" for each appendix title, e.g.
+\begin{verbatim}
+\appendix
+\section{This is the title of the first appendix}
+\section{This is the title of the second appendix}
+\end{verbatim}
+produces:\medskip
+
+\noindent\textbf{Appendix A. This is the title of the first appendix}\medskip
+
+\noindent\textbf{Appendix B. This is the title of the second appendix}\medskip
+
+\noindent Subsections, equations, figures, tables, etc.\ within appendices will then be automatically numbered as appropriate. Some theorem-like environments may need to have their counters reset manually (e.g.\ if they are not numbered within sections in the main text). You can achieve this by using \verb"\numberwithin{remark}{section}" (for example) just after the \verb"\appendix" command.
+
+Please note that if the \verb"endfloat" package is used on a document containing appendices, the \verb"\processdelayedfloats" command must be included immediately before the \verb"\appendix" command in order to ensure that the floats in the main body of the text are numbered as such.
+
+%\processdelayedfloats %%% See above for an explanation of why this command might be needed.
+
+\appendix
+
+\section{Troubleshooting}
+
+Authors may occasionally encounter problems with the preparation of a manuscript using \LaTeX. The appropriate action to take will depend on the nature of the problem:
+\begin{enumerate}
+\item[(i)] If the problem is with \LaTeX\ itself, rather than with the actual macros, please consult an appropriate \LaTeXe\ manual for initial advice. If the solution cannot be found, or if you suspect that the problem does lie with the macros, then please contact Taylor \& Francis for assistance (\texttt{latex.helpdesk@tandf.co.uk}).
+\item[(ii)] Problems with page make-up (e.g.\ occasional overlong lines of text; figures or tables appearing out of order): please do not try to fix these using `hard' page make-up commands -- the typesetter will deal with such problems. (You may, if you wish, draw attention to particular problems when submitting the final version of your manuscript.)
+\item[(iii)] If a required font is not available on your system, allow \TeX\ to substitute the font and specify which font is required in a covering letter accompanying your files.
+\end{enumerate}
+
+
+\section{Obtaining the template and class file}
+
+\subsection{Via the Taylor \& Francis website}
+
+This article template and the \texttt{interact} class file may be obtained via the `Instructions for Authors' pages of selected Taylor \& Francis journals.
+
+Please note that the class file calls up the open-source \LaTeX\ packages booktabs.sty, epsfig.sty and rotating.sty, which will, for convenience, unpack with the downloaded template and class file. The template calls for natbib.sty and subfigure.sty, which are also supplied for convenience.
+
+
+\subsection{Via e-mail}
+
+This article template, the \texttt{interact} class file and the associated open-source \LaTeX\ packages are also available via e-mail. Requests should be addressed to \texttt{latex.helpdesk@tandf.co.uk}, clearly stating for which journal you require the template and class file.
+
+\end{document}

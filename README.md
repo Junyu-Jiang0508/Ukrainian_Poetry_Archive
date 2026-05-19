@@ -15,38 +15,46 @@ This project applies computational methods from corpus linguistics and NLP to an
 
 | # | Question | Stage |
 |---|----------|-------|
-| **RQ1** | How has the referential scope of 1PL *ми* (we) shifted across war phases? | `02b` per-cell GLM with **co-primary inference**: Poisson+cluster(+wild bootstrap p) and NB+cluster; `02b2`/`02b3`/`02b4` (token / FV / FV-excl-imperative sensitivities); `00e` precomputes FV counts; `02bcmp` + `02bsc` summarize robustness |
-| **RQ1b** | Which authors drive any observed shift, and is it robust? | `02bq1b` author×period FE (HC3 + strict per-cell filter) and per-author δ bootstrap forests |
+| **RQ1 (primary)** | How is pronominal attention reallocated within the closed first/second-person quartet `{1sg, 1pl, 2sg, 2pl_vy_true_plural}` across the 2022 cutpoint? | `02a` closed-denominator binomial logit with **co-primary inference**: lme4 GLMM with random author intercept and R `survival::clogit` conditional logit; legacy `+C(author)` MLE retained as sensitivity only |
+| **RQ1b** | Which authors drive the attention shift, and is it robust? | `02bq1b` author×period FE (HC1 + strict per-cell filter) and per-author δ bootstrap forests; `02a` leave-one-author-out sensitivity |
 | **RQ1c** | Did the same peace-time poets change, or did war recruit new entrants? | `02bq1c` GLM restricted to authors with first observed year ≤ 2014 (exploratory; not in main BH family) |
-| **RQ2** | How does author-level heterogeneity modulate the period shift? | `02c` hierarchical random-slope (`02_modeling_q2_hierarchical.py`) |
-| **RQ3** | Are typology- and period-based contrasts robust at corpus and cohort level? | `02a/02d/02f` (significance + typology models) |
+| **RQ2 (secondary)** | Does the attention reallocation track an *absolute* shift in any individual cell, or only a redistribution? | `02b` per-cell Poisson / NB GLM with token offset (post-P0-3 primary); `02b2`/`02b3`/`02b4` (stanza / FV / FV-excl-imperative sensitivities); `00e` precomputes FV counts; `02bcmp` + `02bsc` summarize robustness |
+| **RQ3** | How is the shift distributed across individual authors? | `02c` hierarchical random-slope (`02_modeling_q2_hierarchical.py`) |
+| **RQ4** | Are typology- and period-based contrasts robust at corpus and cohort level? | `02d/02f` (significance + typology models) |
 
-**Estimand decoupling between `02b` (Absolute Salience) and `02a` (Attention Allocation).**
+**Estimand decoupling between `02a` (Attention Allocation, primary) and `02b` (Absolute Salience, secondary).**
 The two confirmatory stages target *different* estimands and must not be conflated in
 the manuscript narrative:
 
-- **`02b` — Absolute Salience.** Per-cell Poisson / NB GLM with offset
-  `log(exposure)` (stanzas, tokens, or finite verbs). Estimand: *"Do poets write
-  absolutely more 1pl (or 2sg, 2pl, 1sg) tokens, controlling for exposure?"*
-  Cells are inferentially independent and the denominator is exposure, not other
-  pronouns.
-- **`02a` — Attention Allocation.** Closed-denominator binomial logit on the
+- **`02a` — Attention Allocation (primary).** Closed-denominator binomial logit on the
   four-cell first/second-person quartet
   `{1sg, 1pl, 2sg, 2pl_vy_true_plural}` with `n_12 = sum(four-cell)` as the
   trial total. Estimand: *"Within the closed first/second-person sub-space, how
   is attention reallocated between self (`1sg`) and group (`1pl`), and between
   intimate (`2sg`) and collective (`2pl`)?"* The closed denominator is a
   feature, not a bug: it is the natural sample space for a pragmatic
-  attention-allocation question.
+  attention-allocation question, and reviewers reading
+  van Dijk (2011) / Wilson (1990) / Chilton (2004) will read pronoun choice as
+  positional rather than absolute. Empirically this is also where the signal
+  in the corpus actually lives (see `outputs/02_modeling_significance_core_contrasts/`).
+- **`02b` — Absolute Salience (secondary).** Per-cell Poisson / NB GLM with offset
+  `log(exposure_n_tokens)` (primary, post-P0-3) and stanza / finite-verb sensitivities.
+  Estimand: *"Do poets write absolutely more 1pl (or 2sg, 2pl, 1sg) tokens, controlling
+  for exposure?"* Cells are inferentially independent and the denominator is exposure,
+  not other pronouns. In the present corpus this estimand is null across cells and
+  strata at α = 0.05 (BH-FDR); it serves as the discipline-mandated absolute-rate check
+  on the primary attention-allocation finding.
 
-Manuscript ordering: report `02b` absolute strength first; then turn to `02a`
-to ask how, *given* changes in absolute strength, the first/second-person
-weights have been internally redistributed. `02a` is fit as a *co-primary*
-combination of (i) a binomial GLMM with random author intercept
-(`lme4::glmer`, via `src/utils/r_glmm_runner.py`) and (ii) a Cox conditional
-logistic regression (`src/utils/conditional_logit_fit.py`), both of which
-avoid the incidental-parameter bias that the unconditional `+ C(author)` MLE
-incurs at our sample size (N ≈ 33 authors).
+Manuscript ordering: report `02a` attention allocation first; then turn to `02b`
+to demonstrate that the redistribution is *not* driven by an absolute rate shift
+in any individual cell — i.e., poets are reweighting how they distribute pronominal
+deixis within the first/second-person sub-space rather than producing absolutely
+more first- or second-person tokens per unit of text. `02a` is fit as a
+*co-primary* combination of (i) a binomial GLMM with random author intercept
+(`lme4::glmer`, via `src/utils/r_glmm_runner.py`) and (ii) a Chamberlain
+conditional logit (`R survival::clogit` via `src/utils/r_clogit_runner.py`,
+post-P0-2 fix), both of which avoid the incidental-parameter bias that the
+unconditional `+ C(author)` MLE incurs at our sample size (N ≈ 33 authors).
 
 **Cell-set split between frequentist and Bayesian paths.** The 5-cell split
 (`{1sg, 1pl, 2sg, 2pl_vy_polite_singular, 2pl_vy_true_plural}`) is collapsed to a
@@ -64,9 +72,13 @@ based (`year` → `period_three_way`). The `invasion_20220224` robustness spec u
 posting date (`Date posted`) and should be interpreted as an **alternate estimand**
 rather than a same-estimand robustness check.
 
-**Offset-selection note.** Stanza offset is retained for continuity, but because many
-poems have `exposure_n_stanzas == 1`, token/FV offsets are co-reported and folded into
-the specification-curve outputs (`02bsc`) to avoid denominator cherry-picking.
+**Offset-selection note (post-P0-3).** The primary Q1 (`02b`) offset is `n_tokens`,
+matching the manuscript Methods. Stanza offset is retained as a sensitivity (`02b2`,
+`--exposure-type=n_stanzas`) because `exposure_n_stanzas == 1` for 74% of poems and is
+therefore constant — and uninformative — across most of the corpus. Finite-verb offsets
+(`02b3`, `02b4`) are also co-reported and folded into the specification-curve outputs
+(`02bsc`) to avoid denominator cherry-picking. The unsuffixed file
+`q1_poem_per_cell_glm_by_language.csv` now carries the token-offset (primary) estimates.
 
 All RQ scripts read the canonical stanza-level GPT annotation table:
 `data/Annotated_GPT_rerun/pronoun_annotation.csv`.
@@ -97,8 +109,8 @@ PYTHONPATH=src python src/00_pipeline_orchestrator.py --list
 | 01e | `01_annotation_gpt_annotate_full.py`         | Wrapper that runs 01d with `--source public` |
 | 01f | `01_annotation_vy_register_audit.py`         | Manual QA package for `vy_register` (full polite-singular + stratified true-plural sample) |
 | 02a | `02_modeling_significance_core_contrasts.py` | **Attention Allocation**: closed-denominator binomial on the 1st/2nd-person 4-cell quartet; co-primary lme4 GLMM + Cox conditional logit (legacy `+C(author)` MLE retained as sensitivity only) |
-| 02b | `02_modeling_q1_per_cell_glm.py`             | **Absolute Salience (RQ1)**: per-cell Poisson / NB GLM with `log(exposure)` offset; co-primary inference file includes Poisson+wild-bootstrap and NB |
-| 02b2 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_tokens` | **RQ1 sensitivity**: same script, token offset |
+| 02b | `02_modeling_q1_per_cell_glm.py`             | **Absolute Salience (RQ1) — token offset, primary**: per-cell Poisson / NB GLM with `log(exposure_n_tokens)` offset; co-primary inference file includes Poisson+wild-bootstrap and NB |
+| 02b2 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_stanzas` | **RQ1 sensitivity**: same script, stanza offset (degenerate for 74 % of poems with single stanza, retained for continuity) |
 | 02b3 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_finite_verbs` | **RQ1 sensitivity**: finite-verb offset (requires `00e`) |
 | 02b4 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_finite_verbs_excl_imperative` | **RQ1 sensitivity**: FV offset excluding imperatives |
 | 02bvl | `02_modeling_finite_verb_validation_sample.py` | Stratified Stanza validation tokens + morph vs depparse agreement |
@@ -113,7 +125,13 @@ PYTHONPATH=src python src/00_pipeline_orchestrator.py --list
 | 02broba | `02_modeling_robustness_author_filter.py` | Q1 replicated under min-poems-per-period thresholds |
 | 02bcmp | `02_modeling_robustness_offset_comparison.py` | Join Q1 offset GLM CSVs (long/wide + forest plots) |
 | 02bsc | `02_modeling_specification_curve.py`        | Build specification-curve tables/figure across Q1-family reasonable specs |
-| 02c | `02_modeling_q2_hierarchical.py`             | **RQ2**: hierarchical NB random-slope with posterior direction probability and q-direction summaries |
+| 02c | `02_modeling_q2_hierarchical.py`             | **RQ3 (author heterogeneity)**: hierarchical NB random-slope with posterior direction probability and q-direction summaries |
+| 02coll | `02_modeling_pronoun_collocations.py`     | **P1-A/B**: dependency-parsed collocations + period-differential log-likelihoods (Stanza UA/RU) |
+| 02drift | `02_modeling_pronoun_semantic_drift.py`  | **P1-C**: per-period FastText + Procrustes drift for ми/я/ти/ви |
+| 02sent | `02_modeling_pronoun_sentiment.py`        | **P1-D**: XLM-R stanza sentiment × dominant pronoun cell mixed model |
+| 02cooc | `02_modeling_pronoun_cooccurrence.py`     | **P1-E**: pronoun ego co-occurrence networks (GraphML + PNG) by cell × period |
+| 02topic | `02_modeling_topic_bertopic.py`          | **P1-F**: per-language BERTopic with multilingual MiniLM embeddings; covariate-ready poem-topic assignments |
+| 02brkpt | `02_modeling_breakpoint_smooth_year.py`  | **P2-2**: smooth-year B-spline GLM and PELT change-point bootstrap CI |
 | 02d | `02_modeling_significance_models.py`         | Model-based inference for pronoun shifts |
 | 02e | `02_modeling_significance_publication_figures.py` | Publication figures for inferential outputs |
 | 02f | `02_modeling_typology_and_period_models.py`  | Typology + period cohort models |

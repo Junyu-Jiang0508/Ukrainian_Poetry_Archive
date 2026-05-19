@@ -468,11 +468,13 @@ def main() -> None:
     parser.add_argument(
         "--exposure-type",
         type=str,
-        default="n_stanzas",
+        default="n_tokens",
         choices=("n_stanzas", "n_tokens", "n_finite_verbs", "n_finite_verbs_excl_imperative"),
         help=(
-            "Offset column: exposure_n_stanzas (primary), exposure_n_tokens (robustness), "
-            "exposure_n_finite_verbs or exposure_n_finite_verbs_excl_imperative (FV robustness)."
+            "Offset column. Primary: exposure_n_tokens (Methods §Statistical Models). "
+            "Sensitivity: exposure_n_stanzas (degenerate for 74%% of poems with single "
+            "stanza, retained for continuity), exposure_n_finite_verbs and "
+            "exposure_n_finite_verbs_excl_imperative (syntactic-slot denominators)."
         ),
     )
     parser.add_argument(
@@ -552,32 +554,36 @@ def main() -> None:
 
     poem_full.to_csv(out_dir / "q1_poem_unit_cell_counts_12.csv", index=False)
 
-    if args.exposure_type == "n_stanzas":
+    # Primary (token offset) writes the unsuffixed filename so downstream consumers
+    # (spec curve, offset comparison) can refer to "the primary Q1 result" without
+    # encoding the offset choice in the filename. Sensitivity offsets get suffixed
+    # names. The stanza offset is now a sensitivity, not the primary.
+    if args.exposure_type == "n_tokens":
         glm_out_name = "q1_poem_per_cell_glm_by_language.csv"
         coprimary_out_name = "q1_poem_per_cell_glm_by_language_coprimary.csv"
     else:
-        # Single-underscore + descriptive suffix to match the robustness-file
-        # naming convention (e.g. ..._robust_period_invasion_20220224.csv).
         glm_out_name = f"q1_poem_per_cell_glm_by_language_offset_{args.exposure_type}.csv"
         coprimary_out_name = f"q1_poem_per_cell_glm_by_language_offset_{args.exposure_type}_coprimary.csv"
     combined.to_csv(out_dir / glm_out_name, index=False)
     combined_coprimary.to_csv(out_dir / coprimary_out_name, index=False)
 
     readme_path = out_dir / "README.md"
-    if not readme_path.is_file() or args.exposure_type == "n_stanzas":
+    if not readme_path.is_file() or args.exposure_type == "n_tokens":
         with readme_path.open("w", encoding="utf-8") as f:
             f.write("# Absolute Salience GLM (Q1 per-cell Poisson/NB, 1st/2nd person, poem level)\n\n")
             f.write(
-                "- **Estimand**: *absolute salience* — whether each pronoun cell appears at a higher "
-                "absolute rate per exposure unit (stanza / token / finite-verb slot) after 2022 vs "
-                "2014--2021. Each row carries `estimand=\"absolute_salience\"`, "
-                "`outcome_scale=\"count_per_exposure\"`, and an explicit `offset_exposure_type`.\n"
+                "- **Status (post-P0-3 refactor):** This stage now reports the *secondary* "
+                "estimand of the manuscript. Primary inference is the closed four-cell "
+                "attention-allocation GLMM in 02a "
+                "(`outputs/02_modeling_significance_core_contrasts/`). Q1 is retained as the "
+                "absolute-salience null check on whether the attention reallocation is "
+                "accompanied by an absolute rate shift.\n\n"
             )
             f.write(
-                "- This complements the closed four-cell *attention allocation* analysis in 02a "
-                "(`outputs/02_modeling_significance_core_contrasts/`), which asks the qualitatively "
-                "distinct question of how the relative configuration of 1st/2nd-person pronouns is "
-                "rearranged within a closed pragmatic subspace.\n\n"
+                "- **Estimand**: *absolute salience* — whether each pronoun cell appears at a higher "
+                "absolute rate per exposure unit (token / stanza / finite-verb slot) after 2022 vs "
+                "2014--2021. Each row carries `estimand=\"absolute_salience\"`, "
+                "`outcome_scale=\"count_per_exposure\"`, and an explicit `offset_exposure_type`.\n"
             )
             f.write(
                 "- Primary cells (inference loop, 4-cell): `{1sg, 1pl, 2sg, 2pl_vy_true_plural}`. "
@@ -588,21 +594,27 @@ def main() -> None:
                 "`2pl` is also kept in the counts CSV.\n"
             )
             f.write(
-                "- Offset: primary analysis uses `exposure_n_stanzas` "
-                "(`q1_poem_per_cell_glm_by_language.csv`); token sensitivity is run side-by-side via "
-                "`--exposure-type=n_tokens` and written to "
-                "`q1_poem_per_cell_glm_by_language_offset_n_tokens.csv`. The two should be compared "
-                "because 74% of poems have `exposure_n_stanzas == 1`, so the stanza-offset is "
-                "degenerate for half the corpus.\n"
+                "- **Offset (primary)**: `exposure_n_tokens` "
+                "(`q1_poem_per_cell_glm_by_language.csv` + `..._coprimary.csv`). Token-count "
+                "denominator is the manuscript-stated primary because 74%% of poems have "
+                "`exposure_n_stanzas == 1`, making the stanza offset constant — and therefore "
+                "uninformative — for three quarters of the corpus.\n"
             )
             f.write(
-                "- Additional robustness option: `--exposure-type=n_finite_verbs` writes "
-                "`q1_poem_per_cell_glm_by_language_offset_n_finite_verbs.csv`, using finite-verb "
-                "counts as a syntactic opportunity denominator. "
-                "`--exposure-type=n_finite_verbs_excl_imperative` excludes `Mood=Imp` from the FV "
-                "denominator (sensitivity). Precompute counts once via `00e_compute_finite_verb_exposure.py` "
-                "→ `data/To_run/00_filtering/stanza_finite_verb_counts.csv`. Exposure diagnostics for all "
-                "available denominators are written to `q1_exposure_diagnostics.csv`.\n"
+                "- **Offset (sensitivity)**: `exposure_n_stanzas` via `--exposure-type=n_stanzas` "
+                "writes `q1_poem_per_cell_glm_by_language_offset_n_stanzas.csv`. Retained for "
+                "continuity with prior versions; reviewers should compare against the primary "
+                "token-offset rows in the offset-comparison artifact (02bcmp).\n"
+            )
+            f.write(
+                "- **Offset (FV robustness)**: `--exposure-type=n_finite_verbs` and "
+                "`--exposure-type=n_finite_verbs_excl_imperative` use finite-verb counts as a "
+                "syntactic-opportunity denominator. The `_excl_imperative` variant removes "
+                "`Mood=Imp` verbs, which load disproportionately on the 2sg/2pl cells in wartime "
+                "apostrophe and would mechanically inflate post-2022 rates if retained. Precompute "
+                "counts once via `00e_compute_finite_verb_exposure.py` → "
+                "`data/To_run/00_filtering/stanza_finite_verb_counts.csv`. Exposure diagnostics "
+                "for all available denominators are written to `q1_exposure_diagnostics.csv`.\n"
             )
             f.write("- Strata: pooled (non-primary BH), Ukrainian, Russian.\n")
             f.write(

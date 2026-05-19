@@ -60,17 +60,19 @@ def build_pipeline_catalog() -> list[PipelineStage]:
         (
             "02b",
             src / "02_modeling_q1_per_cell_glm.py",
-            "Absolute Salience GLM (stanza offset)",
-            "Per-cell Poisson with stanza offset (4-cell primary inference); reports absolute pronoun rates per stanza.",
+            "Absolute Salience GLM (token offset, primary)",
+            "Per-cell Poisson with token offset (4-cell, 4 strata); primary absolute-salience "
+            "sensitivity check on the 02a attention-allocation primary inference.",
             (),
             (),
         ),
         (
             "02b2",
             src / "02_modeling_q1_per_cell_glm.py",
-            "Absolute Salience GLM (token offset)",
-            "Same script, --exposure-type=n_tokens; absolute pronoun rates per token (sensitivity).",
-            ("--exposure-type", "n_tokens"),
+            "Absolute Salience GLM (stanza offset, sensitivity)",
+            "Same script, --exposure-type=n_stanzas; retained for continuity though the stanza "
+            "offset is constant for 74% of poems and therefore weakly informative.",
+            ("--exposure-type", "n_stanzas"),
             (),
         ),
         (
@@ -125,6 +127,55 @@ def build_pipeline_catalog() -> list[PipelineStage]:
         ),
         # --- Bayesian path (5-cell, retains polite-singular under shrinkage) ---
         ("02c", src / "02_modeling_q2_hierarchical.py", "Q2 Hierarchical (5-cell Bayesian)", "Per-cell hierarchical NB with author random slopes; PRIMARY_GLM_CELLS_BAYESIAN.", (), ()),
+        # --- P1: language-depth / semantic-context exploratory layer ---
+        (
+            "02coll",
+            src / "02_modeling_pronoun_collocations.py",
+            "Pronoun collocations (P1-A/B)",
+            "Dependency-parsed pronoun collocations + period-differential log-likelihoods + scatter figures.",
+            (),
+            (),
+        ),
+        (
+            "02drift",
+            src / "02_modeling_pronoun_semantic_drift.py",
+            "Pronoun semantic drift (P1-C)",
+            "Per-period FastText + orthogonal Procrustes alignment; focal-pronoun drift and neighbour lists.",
+            (),
+            (),
+        ),
+        (
+            "02sent",
+            src / "02_modeling_pronoun_sentiment.py",
+            "Stanza sentiment × pronoun cell (P1-D)",
+            "XLM-R multilingual sentiment; mixed-effects model of sentiment by dominant cell × period.",
+            (),
+            (),
+        ),
+        (
+            "02cooc",
+            src / "02_modeling_pronoun_cooccurrence.py",
+            "Pronoun ego co-occurrence networks (P1-E)",
+            "Per (language, cell, period) ego co-occurrence graphs (GraphML + PNG).",
+            (),
+            (),
+        ),
+        (
+            "02topic",
+            src / "02_modeling_topic_bertopic.py",
+            "BERTopic poem-level topics (P1-F)",
+            "Per-language BERTopic with multilingual MiniLM embeddings; covariate-ready poem-topic assignments.",
+            (),
+            (),
+        ),
+        (
+            "02brkpt",
+            src / "02_modeling_breakpoint_smooth_year.py",
+            "Smooth-year + PELT breakpoint (P2-2)",
+            "B-spline smooth-year Poisson GLM and PELT change-point detection with bootstrap CI for the 2022 cutpoint.",
+            (),
+            (),
+        ),
         # --- Other modeling + figures ---
         ("02d", src / "02_modeling_significance_models.py", "Significance Models", "Model-based inference for pronoun shifts.", (), ()),
         ("02e", src / "02_modeling_significance_publication_figures.py", "Significance Figures", "Publication figures for inferential outputs.", (), ()),

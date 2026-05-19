@@ -36,9 +36,11 @@ def _read(path: Path, spec_label: str, source: str) -> pd.DataFrame:
 
 def _collect_inputs(q1_dir: Path, period_dir: Path, ratio_dir: Path) -> pd.DataFrame:
     frames: list[pd.DataFrame] = []
+    # Post-P0-3: the unsuffixed Q1 file now carries the token-offset (primary)
+    # estimates; the stanza offset has moved to a suffixed sensitivity file.
     files = [
-        (q1_dir / "q1_poem_per_cell_glm_by_language_coprimary.csv", "q1_primary_coprimary", "q1"),
-        (q1_dir / "q1_poem_per_cell_glm_by_language_offset_n_tokens_coprimary.csv", "q1_offset_tokens", "q1"),
+        (q1_dir / "q1_poem_per_cell_glm_by_language_coprimary.csv", "q1_primary_tokens_coprimary", "q1"),
+        (q1_dir / "q1_poem_per_cell_glm_by_language_offset_n_stanzas_coprimary.csv", "q1_offset_stanzas", "q1"),
         (q1_dir / "q1_poem_per_cell_glm_by_language_offset_n_finite_verbs_coprimary.csv", "q1_offset_fv", "q1"),
         (
             q1_dir / "q1_poem_per_cell_glm_by_language_offset_n_finite_verbs_excl_imperative_coprimary.csv",
@@ -130,12 +132,154 @@ def _plot_curve(df: pd.DataFrame, out_path: Path) -> None:
     plt.close(fig)
 
 
+def _holm_step_down(p_values: pd.Series) -> pd.Series:
+    """Holm-Bonferroni step-down adjusted p-values (FWER, no dependence model)."""
+    p = pd.to_numeric(p_values, errors="coerce")
+    n_valid = p.notna().sum()
+    if n_valid == 0:
+        return pd.Series(np.full(len(p), np.nan), index=p.index)
+    ranks = p.rank(method="first").astype(float)
+    adj = (n_valid - ranks + 1.0) * p
+    # Monotone non-decreasing along the sorted p-values.
+    order = p.sort_values().index
+    cum_max = -np.inf
+    out = pd.Series(np.nan, index=p.index, dtype=float)
+    for idx in order:
+        cum_max = max(cum_max, float(adj.loc[idx]))
+        out.loc[idx] = min(cum_max, 1.0)
+    return out
+
+
+def _romano_wolf_step_down(
+    p_values: pd.Series,
+    *,
+    correlation: float = 0.5,
+    n_bootstrap: int = 5000,
+    seed: int = 20260519,
+) -> pd.Series:
+    """Parametric Romano-Wolf FWER-adjusted p-values under exchangeable correlation.
+
+    Draw ``n_bootstrap`` Gaussian samples of length ``K`` with exchangeable
+    correlation ``correlation`` between specs (no constraint that each spec
+    points to the same underlying null), compute the bootstrap distribution
+    of the *max* |z| over the remaining specs at each step-down stage, and
+    use it to adjust each spec's p-value. Returns adjusted p-values aligned
+    to the input index.
+
+    The exchangeable-correlation assumption is conservative for spec families
+    that share a denominator and aggressive for those that do not; we report
+    Holm (no dependence model) alongside as the discipline.
+    """
+    p = pd.to_numeric(p_values, errors="coerce")
+    valid_mask = p.notna() & p.gt(0.0)
+    valid = p[valid_mask].copy()
+    if len(valid) <= 1 or correlation < 0.0 or correlation >= 1.0:
+        return _holm_step_down(p_values)
+
+    from scipy.stats import norm
+
+    # Convert each two-sided p-value to absolute z-score under H0.
+    z_obs = norm.isf(valid.to_numpy() / 2.0)
+    n = len(valid)
+    rng = np.random.default_rng(seed)
+    # Exchangeable AR(0) covariance: Sigma = (1 - rho) * I + rho * 11^T.
+    common = rng.standard_normal(size=n_bootstrap) * np.sqrt(correlation)
+    idio = rng.standard_normal(size=(n_bootstrap, n)) * np.sqrt(max(1.0 - correlation, 0.0))
+    z_boot = np.abs(common[:, None] + idio)
+
+    # Step-down: order specs by descending |z_obs|.
+    order = np.argsort(-z_obs)
+    adj = np.zeros(n)
+    cum_max_threshold = 0.0
+    for step, idx in enumerate(order):
+        remaining = order[step:]
+        max_over_remaining = z_boot[:, remaining].max(axis=1)
+        p_step = float(np.mean(max_over_remaining >= z_obs[idx]))
+        # Monotone: subsequent specs cannot have a smaller adjusted p than the prior step.
+        cum_max_threshold = max(cum_max_threshold, p_step)
+        adj[idx] = min(cum_max_threshold, 1.0)
+
+    out = pd.Series(np.nan, index=p_values.index, dtype=float)
+    out.loc[valid.index] = adj
+    return out
+
+
+def _joint_inference_table(curve: pd.DataFrame, **rw_kwargs) -> pd.DataFrame:
+    """Per (language_stratum, cell) joint-inference table across specs.
+
+    Reports Holm-adjusted p-values and Romano-Wolf-adjusted p-values, plus the
+    fraction of specs that remain significant at $\alpha = 0.05$ after each
+    correction. The naïve per-spec ``p_value_clustered_author`` is also
+    retained for transparency.
+    """
+    df = curve.copy()
+    # Pick the most defensible per-spec p-value: prefer the wild-cluster
+    # bootstrap p when available, otherwise the clustered-SE p.
+    if "q_value_bh_wild_within_stratum" in df.columns and "q_value_bh_within_stratum" in df.columns:
+        pass
+    if "p_value_clustered_author" not in df.columns:
+        # ratio-binomial path uses different column names; fall back.
+        for cand in ("p_value", "p_clustered"):
+            if cand in df.columns:
+                df["p_value_clustered_author"] = df[cand]
+                break
+    if "p_value_clustered_author" not in df.columns:
+        return pd.DataFrame()
+
+    df["p_value_for_joint"] = df["p_value_clustered_author"].astype(float)
+
+    rows: list[dict[str, object]] = []
+    for (lang, cell), grp in df.groupby(["language_stratum", "cell"], sort=False):
+        if grp.empty:
+            continue
+        holm = _holm_step_down(grp["p_value_for_joint"])
+        rw = _romano_wolf_step_down(grp["p_value_for_joint"], **rw_kwargs)
+        rows.append(
+            {
+                "language_stratum": lang,
+                "cell": cell,
+                "n_specs": int(len(grp)),
+                "n_specs_p05_raw": int((grp["p_value_for_joint"] < 0.05).sum()),
+                "n_specs_p05_holm": int((holm < 0.05).sum()),
+                "n_specs_p05_romano_wolf": int((rw < 0.05).sum()),
+                "min_p_raw": float(grp["p_value_for_joint"].min()),
+                "min_p_holm": float(holm.min()),
+                "min_p_romano_wolf": float(rw.min()),
+                "median_rate_ratio": float(grp["rate_ratio_post_vs_pre"].median()),
+                "share_positive_direction": float(grp["direction_positive"].mean()),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _per_spec_adjusted_pvals(curve: pd.DataFrame, **rw_kwargs) -> pd.DataFrame:
+    """Per-spec long table with adjusted p-values appended."""
+    df = curve.copy()
+    if "p_value_clustered_author" not in df.columns:
+        return df
+    df["holm_adj_p_within_cell_stratum"] = np.nan
+    df["romano_wolf_adj_p_within_cell_stratum"] = np.nan
+    for (lang, cell), grp in df.groupby(["language_stratum", "cell"], sort=False):
+        holm = _holm_step_down(grp["p_value_clustered_author"])
+        rw = _romano_wolf_step_down(grp["p_value_clustered_author"], **rw_kwargs)
+        df.loc[holm.index, "holm_adj_p_within_cell_stratum"] = holm.values
+        df.loc[rw.index, "romano_wolf_adj_p_within_cell_stratum"] = rw.values
+    return df
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build specification-curve outputs from Q1-family robustness runs.")
     ap.add_argument("--q1-dir", type=Path, default=DEFAULT_Q1_DIR)
     ap.add_argument("--period-dir", type=Path, default=DEFAULT_PERIOD_DIR)
     ap.add_argument("--ratio-dir", type=Path, default=DEFAULT_RATIO_DIR)
     ap.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    ap.add_argument(
+        "--rw-correlation",
+        type=float,
+        default=0.5,
+        help="Exchangeable correlation assumption for Romano-Wolf (0=independent specs).",
+    )
+    ap.add_argument("--rw-bootstrap", type=int, default=5000)
     args = ap.parse_args()
 
     out_dir = args.output.resolve()
@@ -152,8 +296,17 @@ def main() -> None:
         .reset_index()
     )
     summary.to_csv(out_dir / "specification_curve_direction_summary.csv", index=False)
+
+    # P2-4: Holm + Romano-Wolf joint inference across specs.
+    rw_kwargs = {"correlation": args.rw_correlation, "n_bootstrap": args.rw_bootstrap}
+    joint = _joint_inference_table(curve, **rw_kwargs)
+    if not joint.empty:
+        joint.to_csv(out_dir / "spec_curve_joint_inference.csv", index=False)
+    per_spec_adj = _per_spec_adjusted_pvals(curve, **rw_kwargs)
+    per_spec_adj.to_csv(out_dir / "spec_curve_per_spec_adjusted.csv", index=False)
+
     _plot_curve(curve, out_dir / "specification_curve_rr.png")
-    print(f"Wrote specification curve outputs to: {out_dir}")
+    print(f"Wrote specification curve outputs (incl. Romano-Wolf joint inference) to: {out_dir}")
 
 
 if __name__ == "__main__":
