@@ -45,25 +45,25 @@ descendant of the period effect, not an antecedent.
 Schema columns (canonical order)
 --------------------------------
 * ``author`` (string, primary key)
-* ``gender``  ∈  {``F``, ``M``, ``NB``, ``unknown``}
+* ``gender``  ∈  {``F``, ``M``, ``NB``}  (blank if unknown)
 * ``birth_year`` (4-digit string year, e.g. ``"1975"``; blank if unknown)
 * ``generation_cohort``  ∈
-  {``pre_1970``, ``1970s``, ``1980s``, ``1990s``, ``2000s_plus``, ``unknown``}
+  {``pre_1970``, ``1970s``, ``1980s``, ``1990s``, ``2000s_plus``}  (blank if unknown)
 * ``region_of_birth``  ∈  {``east_ukraine``, ``west_ukraine``,
   ``central_ukraine``, ``south_ukraine``, ``kyiv``, ``crimea``,
-  ``born_abroad``, ``other``, ``unknown``}
+  ``born_abroad``, ``other``}  (blank if unknown)
 * ``region_jan2022``  (same vocabulary as ``region_of_birth`` plus
   ``diaspora``; documented as a pre-invasion snapshot, only ~21/281
   authors have this from the xlsx)
 * ``region_at_archive_freeze``  (same vocabulary; **post-2022 snapshot**,
   do not use as a static control)
 * ``language_xlsx_primary_at_freeze``  ∈  {``Ukrainian``, ``Russian``,
-  ``bilingual``, ``other``, ``unknown``}  (xlsx Primary language; the
-  xlsx does not document which year this reflects)
+  ``bilingual``, ``other``}  (blank if unknown; xlsx Primary language)
 * ``language_corpus_p1``  (empirical dominant language in P1: 2014--2021;
-  same vocabulary)
-* ``language_corpus_p2``  (empirical dominant language in P2: post-2022)
-* ``bilingual_switcher_corpus``  ∈  {``yes``, ``no``, ``unknown``}
+  same vocabulary; blank if unknown)
+* ``language_corpus_p2``  (empirical dominant language in P2: post-2022;
+  blank if unknown)
+* ``bilingual_switcher_corpus``  ∈  {``yes``, ``no``}  (blank if unknown)
   (empirical, derived from the corpus by the roster freeze stage)
 * ``notes`` (free text, optional)
 * ``references`` (pipe-separated source URLs; optional; not a model predictor)
@@ -89,14 +89,14 @@ DEFAULT_COVARIATE_PATH = repository_root() / "data" / "author_covariates.csv"
 class CovariateColumn:
     name: str
     allowed: frozenset[str] | None  # None == free text / numeric-like
-    default_unknown: str = "unknown"
+    default_unknown: str = ""  # blank cell = missing / not yet researched
     time_anchor: str = "time_invariant"  # documentation-only field
 
 
 # Region vocabulary shared by the three time-anchored region columns. We add
 # ``born_abroad`` for region_of_birth (e.g. born in Russia, Tajikistan, Poland)
 # and ``diaspora`` for the two snapshot columns (post-emigration). Both are
-# documented as ``other``'s siblings, not as substitutes for ``unknown``.
+# documented as ``other``'s siblings. Blank = missing (not a coded category).
 _REGION_VOCAB = frozenset(
     {
         "east_ukraine",
@@ -108,12 +108,11 @@ _REGION_VOCAB = frozenset(
         "born_abroad",
         "diaspora",
         "other",
-        "unknown",
     }
 )
 
 _LANGUAGE_VOCAB = frozenset(
-    {"Ukrainian", "Russian", "bilingual", "other", "unknown"}
+    {"Ukrainian", "Russian", "bilingual", "other"}
 )
 
 
@@ -121,7 +120,7 @@ SCHEMA: tuple[CovariateColumn, ...] = (
     CovariateColumn("author", None, time_anchor="key"),
     CovariateColumn(
         "gender",
-        frozenset({"F", "M", "NB", "unknown"}),
+        frozenset({"F", "M", "NB"}),
         time_anchor="time_invariant",
     ),
     # birth_year is stored as a string so blanks coerce predictably; downstream
@@ -129,7 +128,7 @@ SCHEMA: tuple[CovariateColumn, ...] = (
     CovariateColumn("birth_year", None, time_anchor="time_invariant"),
     CovariateColumn(
         "generation_cohort",
-        frozenset({"pre_1970", "1970s", "1980s", "1990s", "2000s_plus", "unknown"}),
+        frozenset({"pre_1970", "1970s", "1980s", "1990s", "2000s_plus"}),
         time_anchor="time_invariant",
     ),
     CovariateColumn("region_of_birth", _REGION_VOCAB, time_anchor="time_invariant"),
@@ -160,7 +159,7 @@ SCHEMA: tuple[CovariateColumn, ...] = (
     ),
     CovariateColumn(
         "bilingual_switcher_corpus",
-        frozenset({"yes", "no", "unknown"}),
+        frozenset({"yes", "no"}),
         time_anchor="empirical_period_1_vs_period_2_contrast",
     ),
     CovariateColumn("notes", None, time_anchor="free_text"),
@@ -190,6 +189,12 @@ def schema_columns() -> list[str]:
     return [c.name for c in SCHEMA]
 
 
+def is_covariate_missing(series: pd.Series) -> pd.Series:
+    """True where a covariate cell is blank or legacy ``unknown``."""
+    s = series.astype(str).str.strip()
+    return s.eq("") | s.str.casefold().eq("unknown")
+
+
 def _validate(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     """Coerce columns to canonical strings; record any out-of-vocabulary values."""
     warnings_list: list[str] = []
@@ -202,19 +207,22 @@ def _validate(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
                 out[col.name] = ""
             else:
                 out[col.name] = col.default_unknown
-            warnings_list.append(f"column {col.name!r} absent; defaulted to {col.default_unknown!r}")
+            warnings_list.append(f"column {col.name!r} absent; defaulted to blank")
             continue
-        out[col.name] = out[col.name].fillna(col.default_unknown).astype(str).str.strip()
+        out[col.name] = out[col.name].fillna("").astype(str).str.strip()
+        # Legacy CSV rows may still contain the literal token ``unknown``.
+        out.loc[out[col.name].str.casefold().eq("unknown"), col.name] = ""
         if col.allowed is None:
             continue
-        out_of_set = ~out[col.name].isin(col.allowed)
+        filled = out[col.name].ne("")
+        out_of_set = filled & ~out[col.name].isin(col.allowed)
         if out_of_set.any():
             bad = sorted(out.loc[out_of_set, col.name].unique().tolist())
             warnings_list.append(
                 f"column {col.name!r} has values outside the allowed set "
-                f"{sorted(col.allowed)!r}: {bad!r}; coerced to {col.default_unknown!r}"
+                f"{sorted(col.allowed)!r}: {bad!r}; coerced to blank"
             )
-            out.loc[out_of_set, col.name] = col.default_unknown
+            out.loc[out_of_set, col.name] = ""
     return out, warnings_list
 
 
@@ -229,10 +237,9 @@ def load_author_covariates(
         if warn_on_missing:
             log.warning(
                 "Author covariates file %s not found. Downstream models will "
-                "fall back to %r for every field. See utils.author_covariates.SCHEMA "
+                "fall back to blank for every field. See utils.author_covariates.SCHEMA "
                 "for the schema and time-anchor documentation.",
                 p,
-                "unknown",
             )
         return pd.DataFrame(columns=schema_columns())
     raw = pd.read_csv(p, dtype=str, keep_default_na=False, low_memory=False, comment="#")
@@ -267,7 +274,8 @@ def merge_onto_poem_table(
     for col in SCHEMA:
         if col.name in ("author", "notes", "references", "birth_year"):
             continue
-        out[col.name] = out[col.name].fillna(col.default_unknown)
+        out[col.name] = out[col.name].fillna("")
+        out.loc[out[col.name].astype(str).str.casefold().eq("unknown"), col.name] = ""
     return out
 
 

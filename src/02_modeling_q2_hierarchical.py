@@ -17,6 +17,7 @@ import pandas as pd
 
 from utils.author_covariates import (
     SAFE_FOR_PERIOD_SLOPE_PREDICTORS,
+    is_covariate_missing,
     load_author_covariates,
     merge_onto_poem_table,
 )
@@ -364,8 +365,8 @@ def fit_hierarchical_covariate_adjusted_per_cell(
     Fits the same negative-binomial random-slope structure as
     :func:`fit_hierarchical_per_cell` but with author-level covariates
     entering the formula as main effects + ``period_post : covariate``
-    cross-level interactions. Authors with ``unknown`` on any selected
-    covariate are dropped (complete-case analysis); we report the per-cell
+    cross-level interactions. Authors with a blank covariate on any selected
+    predictor are dropped (complete-case analysis); we report the per-cell
     ``n_authors_complete`` so reviewers can see how much information is
     used.
 
@@ -436,7 +437,7 @@ def fit_hierarchical_covariate_adjusted_per_cell(
     dat = merge_onto_poem_table(dat, covariates)
     n_total_authors_before_complete_case = int(dat["author"].nunique())
     mask_complete = np.logical_and.reduce(
-        [dat[p].astype(str).ne("unknown").to_numpy() for p in cross_level_predictors]
+        [~is_covariate_missing(dat[p]).to_numpy() for p in cross_level_predictors]
     )
     dat = dat.loc[mask_complete].copy()
     n_complete = int(dat["author"].nunique())
@@ -1019,7 +1020,7 @@ def main() -> None:
                 "Each row reports the period effect estimated jointly with main effects "
                 "and `period_post:<predictor>` cross-level interactions on the time-"
                 "invariant author covariates loaded from `data/author_covariates.csv`.\n"
-                "- Complete-case design: authors with `unknown` on any selected predictor "
+                "- Complete-case design: authors with a blank on any selected predictor "
                 "are dropped; `n_authors_complete_case` and `n_authors_pre_complete_case` "
                 "in the output document the attrition.\n"
                 "- This is a **sensitivity** model. It does not replace the primary "
