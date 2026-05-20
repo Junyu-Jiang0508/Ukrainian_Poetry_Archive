@@ -1,0 +1,142 @@
+﻿# Author covariates — time-anchored schema (P2-3 refactor).
+# See src/utils/author_covariates.py docstring for the full schema and the
+# time-anchor documentation that governs which columns are safe to use as
+# group-level predictors in within-author × period models.
+# Safe time-invariant predictors for 02c slope models:
+#   gender, generation_cohort, region_of_birth, language_corpus_p1
+# Do NOT use region_at_archive_freeze as a static control — it is a
+# descendant of the period effect (post-2022 emigration), not an antecedent.
+# Allowed vocabularies are enforced by utils.author_covariates.SCHEMA.
+# Provenance for every filled cell lives in
+# data/author_covariates_provenance_audit.csv.
+author,gender,birth_year,generation_cohort,region_of_birth,region_jan2022,region_at_archive_freeze,language_xlsx_primary_at_freeze,language_corpus_p1,language_corpus_p2,bilingual_switcher_corpus,notes,references
+Boris Khersonsky,M,1950,pre_1970,west_ukraine,south_ukraine,south_ukraine,bilingual,Russian,Russian,no,born: Chernivtsi (west_ukraine); long-time Odesa; Russian primary historically; Ukrainian publishing post-2014 → bilingual; PEN: PEN member; other locations: Rome,https://en.wikipedia.org/wiki/Borys_Khersonskyi | https://pen.org.ua/en/members/hersonskyj-borys | https://lannan.georgetown.edu/boris-kershonsky/ | https://www.thecafereview.com/summer-2024-poet-boris-khersonsky/
+Ihor Mitrov,M,1991,1990s,south_ukraine,kyiv,kyiv,Ukrainian,Ukrainian,Ukrainian,no,born: Kerch (south_ukraine; Kerch/crimea taxonomy conflict noted); Jan 2022: Kyiv; current: Kyiv; 95th Air Assault Brigade since Mar 2022,https://www.versopolis.com/poet/610/ihor-mitrov | https://chytomo.com/en/ihor-mitrov-a-bohemian-poet-at-war-turns-into-an-ordinary-soldier/ | https://pen.org.ua/en/ihor-mitrov-bohemnyj-poet-na-vijni-peretvoryuyetsya-u-zvychajnoho-soldata
+Iryna Shuvalova,F,1986,1980s,kyiv,diaspora,diaspora,Ukrainian,Ukrainian,Ukrainian,no,born: Kyiv; Jan 2022: diaspora (Nanjing/China); current: diaspora (Oslo since 2023); PhD Cambridge 2020; PEN: PEN member; other locations: Cambridge· UK,https://en.wikipedia.org/wiki/Iryna_Shuvalova | https://pen.org.ua/en/autors/shuvalova-iryna | https://www.versopolis.com/poet/556/iryna-shuvalova | https://poets.org/poet/iryna-shuvalova
+Oleksandr Irvanets,M,1961,pre_1970,west_ukraine,kyiv,kyiv,Ukrainian,Ukrainian,Ukrainian,no,born: Lviv; raised Rivne; Jan 2022: Kyiv (Irpin); current: Kyiv (Irpin); Bu-Ba-Bu co-founder; PEN: PEN member,https://en.wikipedia.org/wiki/Oleksandr_Irvanets | https://pen.org.ua/en/members/irvanets-oleksandr | https://www.wikidata.org/wiki/Q3489996
+Serhiy Zhadan,M,1974,1970s,east_ukraine,east_ukraine,east_ukraine,Ukrainian,Ukrainian,Ukrainian,no,born: Starobilsk (Luhansk); Jan 2022: east_ukraine (Kharkiv); current: east_ukraine (Kharkiv); 13th Khartia Brigade National Guard May 2024; PEN: PEN member,https://en.wikipedia.org/wiki/Serhiy_Zhadan | https://pen.org.ua/en/members/zhadan-sergij | https://imperiia.scalar.fas.harvard.edu/imperiia/serhiy-zhadan-i-----farwell-to-a-slavic-woman | https://www.wordsforwar.com/serhiy-zhadan-bio
+Anton Polunin,M,1985,1980s,unknown,unknown,unknown,Ukrainian,Ukrainian,Ukrainian,no,DOB 20 Jul 1985 (Smoloskyp); Kyiv Poetry Week co-founder 2016; ZSU service; birth place and residence unknown (no source),https://www.smoloskyp.com.ua/product/volossya/ | https://nashformat.ua/products/volossya-940504 | https://arkushi.com/poety/anton-polunin/ | https://litcentr.in.ua/publ/279-1-0-17425
+Julia Musakovska,F,1982,1980s,west_ukraine,west_ukraine,west_ukraine,Ukrainian,Ukrainian,Ukrainian,no,born: Lviv (9 Jul 1982); Jan 2022: west_ukraine (Lviv); current: west_ukraine (Lviv); Lviv Nat'l Univ alum; PEN: PEN member,https://en.wikipedia.org/wiki/Yuliya_Musakovska | https://pen.org.ua/en/autors/musakovska-yuliya | https://www.arrowsmithpress.com/yuliya-musakovska/ | https://www.catranslation.org/person/yuliya-musakovska/
+Kateryna Kalytko,F,1982,1980s,central_ukraine,central_ukraine,central_ukraine,Ukrainian,Ukrainian,Ukrainian,no,born: Vinnytsia (8 Mar 1982); Jan 2022: central_ukraine; current: central_ukraine (Vinnytsia/Sarajevo); Shevchenko Prize 2023; PEN: PEN member,https://en.wikipedia.org/wiki/Kateryna_Kalytko | https://pen.org.ua/en/autors/kalytko-kateryna | https://www.wordsforwar.com/kateryna-kalytko-bio | https://www.versopolis.com/author/551/kateryna-kalytko
+Iya Kiva,F,1984,1980s,east_ukraine,kyiv,west_ukraine,bilingual,Russian,Russian,yes,born: Donetsk; Jan 2022: Kyiv; current: west_ukraine (Lviv post-Feb 2022); first collection 2018 bilingual UA/RU; PEN: PEN member,https://en.wikipedia.org/wiki/Iya_Kiva | https://www.versopolis.com/poet/467/iya-kiva | https://kulturvermittlung.org/stipendiatinnen/iya-kiva/?lang=en | https://www.iwm.at/documenting-ukraine/blog/only-love-is-worth-fighting-for-iya-kiva-on-her-home-in-donetsk
+Yury Solomko,unknown,,unknown,unknown,unknown,unknown,unknown,Russian,Russian,no,PENDING: no biographical source for poet Yury Solomko; possible namesake with visual artist Yuriy Solomko (Crimea-born; Kyiv-based); xlsx Kharkiv birth unverified,https://www.artmajeur.com/yuriy-solomko | https://archive.kyivpost.com/article/guide/museums/boundaries-by-yury-solomko-58206.html
+Alex Averbuch,M,1985,1980s,east_ukraine,diaspora,diaspora,bilingual,Ukrainian,Ukrainian,yes,born: Novoaidar (Luhansk Oblast); Israel 2001-2015; Toronto PhD 2022; asst prof U Michigan; bilingual UA/RU; latest collection predominantly Ukrainian,https://lsa.umich.edu/slavic/people/faculty/alex-averbuch.html | https://lyrik-in-transition.uni-trier.de/even/lecture-oleksandr-averbuch/ | https://ukrainianjewishencounter.org/en/relieving-the-terrible-knots-of-history-an-interview-with-alex-averbuch/ | https://homintern.soy/issues/11-9-20/frozensilent.html
+Halyna Kruk,F,1974,1970s,west_ukraine,west_ukraine,west_ukraine,Ukrainian,Ukrainian,Ukrainian,no,born: Lviv (30 Nov 1974); Jan 2022: west_ukraine (Lviv); current: west_ukraine (Lviv); Ivan Franko Univ professor; former VP PEN Ukraine; PEN: PEN member,https://en.wikipedia.org/wiki/Halyna_Kruk | https://www.versopolis.com/poet/207/halyna-kruk | https://www.lyrikline.org/en/authors/halyna-kruk | https://philology.lnu.edu.ua/en/employee/halyna-kruk
+Andrij Bondar,M,1974,1970s,central_ukraine,kyiv,kyiv,Ukrainian,Ukrainian,Russian,yes,born: Kamianets-Podilskyi (14 Aug 1974); Jan 2022: kyiv; current: kyiv (Vorzel suburb); PEN: PEN member,https://en.wikipedia.org/wiki/Andriy_Bondar | https://literaturfestival.com/en/authors/andrij-bondar/ | https://www.wikidata.org/wiki/Q651264 | https://pen.org.ua/members/bondar-andrij
+Mykhailo Zharzhailo,M,1988,1980s,west_ukraine,unknown,unknown,Ukrainian,Ukrainian,Ukrainian,no,born: Rivne (7 Apr 1988); moved to Kyiv for studies; Wikidata also lists Lviv; PEN: PEN member; Jan 2022/current residence unknown (hard-stop),https://en.wikipedia.org/wiki/Mykhailo_Zharzhailo | https://www.wikidata.org/wiki/Q20067054
+Borys Humeniuk,M,1965,pre_1970,west_ukraine,west_ukraine,unknown,Ukrainian,Ukrainian,Ukrainian,no,born: Ostriv village Ternopil Oblast (1965); ATO volunteer 2014; re-enlisted Feb 2022; MIA since Dec 2022; region_freeze unknown,https://euromaidanpress.com/2026/02/27/poet-went-to-war-twice-and-vanished-his-friend-published-the-book-he-left-behind/ | https://day.kyiv.ua/en/article/culture/poems-war
+Elizaveta Zharikova,F,,unknown,east_ukraine,kyiv,unknown,Ukrainian,Ukrainian,Ukrainian,no,born: Novopskov Luhansk Oblast; pre-invasion Kyiv; combat medic Territorial Defense since Feb 2022; birth year not found,https://book.artarsenal.in.ua/en/guest-2024/yelyzaveta-zharikova-2/ | https://ui.org.ua/en/artists/yelyzaveta-zharikova-2/ | https://chytomo.com/en/three-writers-in-the-war-zone-three-and-a-half-years-later-we-are-still-here/
+Dmytro Lazutkin,M,1978,1970s,kyiv,kyiv,kyiv,Ukrainian,Ukrainian,Ukrainian,no,born: Kyiv (18 Nov 1978); PEN: PEN member; mobilized summer 2023 47th Brigade Magura; MoD spokesperson since 2024; Shevchenko Prize 2024,https://en.wikipedia.org/wiki/Dmytro_Lazutkin | https://pen.org.ua/en/members/lazutkin-dmytro | https://kyivindependent.com/popular-poet-named-defense-ministry-spokesperson/ | https://ukraineworld.org/en/articles/stories/story-148
+Eva Tur,F,,unknown,central_ukraine,unknown,unknown,Ukrainian,Ukrainian,Ukrainian,no,born: Poltava Oblast; ZSU since 2014 (paramedic; drone pilot defense intelligence); birth year and current location unknown,https://www.weareukraine.info/special/the-story-of-military-servicewoman-and-artist-eva-tur/ | https://euromaidanpress.com/2024/06/10/war-poetry-ukrainian-female-fighter-pens-powerful-words-on-gender-identity/ | https://www.londonukrainianreview.org/posts/poetry-by-ukraines-defenders
+Iryna Vikyrchak,F,1988,1980s,west_ukraine,unknown,unknown,Ukrainian,Ukrainian,other,no,born: Zalishchyky Ternopil Oblast (17 May 1988); co-founded Intermezzo festival; 2024 bilingual collection Letters from Kolkata; Jan 2022/current unknown (hard-stop),https://www.theemptysquare.org/the-participants/iryna-vikyrchak | https://www.wikidata.org/wiki/Q16695745 | https://losthorsepress.org/catalog/algometry-poems-by-iryna-vikyrchak-translated-from-the-ukrainian-by-nina-murray/
+Olena Boryshpolets,unknown,,unknown,unknown,unknown,unknown,unknown,Russian,Ukrainian,yes,PENDING: no reliable source found in batch; recommend Research-mode follow-up,
+Kateryna Babkina,F,1985,1980s,west_ukraine,kyiv,kyiv,Ukrainian,Ukrainian,Ukrainian,no,born: Ivano-Frankivsk (22 July 1985); Jan 2022: kyiv; current: kyiv (may shuttle Kyiv/Warsaw); 2021 Angelus Award; PEN: PEN member,https://en.wikipedia.org/wiki/Kateryna_Babkina | https://pen.org.ua/en/members/babkina-kateryna | https://www.meridiancz.com/en/kateryna-babkina-ukraine/
+Danik Zadorozhnyi,unknown,,unknown,unknown,unknown,unknown,unknown,Ukrainian,Ukrainian,no,PENDING: no reliable source found in batch; recommend Research-mode follow-up,
+Ludmila Khersonskaya,F,1964,pre_1970,born_abroad,south_ukraine,diaspora,Russian,Russian,Russian,no,born: Tiraspol Moldavian SSR (born_abroad); long-time Odesa with Boris Khersonsky; as of 2023 Europe residency (Civitella Ranieri etc.) → diaspora at freeze,https://www.wordsforwar.com/lyudmyla-khersonska-bio | https://lannan.georgetown.edu/lyudmyla-khersonska/ | https://civitella.org/fellow/ludmila-khersonsky/ | https://www.arrowsmithpress.com/lyudmyla-khersonska
+Hryhoryi Falkovych,M,1940,pre_1970,kyiv,kyiv,west_ukraine,bilingual,Ukrainian,Ukrainian,no,born: Kyiv (25 June 1940); pre-invasion Kyiv; evacuated Kolomyia (west_ukraine) during 2022 war; Jewish-Ukrainian poet; initially Russian; now also Ukrainian → bilingual; PEN: PEN member,https://pen.org.ua/en/members/falkovych-grygorij | https://book.artarsenal.in.ua/en/guest-2025/hryhorii-falkovych/ | https://ukrainianjewishencounter.org/en/nash-holos-hryhorii-falkovych/ | https://theconversation.com/ukraine-war-a-wave-of-books-to-give-traumatised-children-hope-231750
+Ostap Slyvynsky,M,1978,1970s,west_ukraine,west_ukraine,west_ukraine,Ukrainian,Ukrainian,Ukrainian,no,born: Lviv (14 Oct 1978); Jan 2022: west_ukraine (Lviv); current: west_ukraine (Lviv); teaches Polish lit Ivan Franko Univ; VP PEN Ukraine; PEN: PEN member,https://en.wikipedia.org/wiki/Ostap_Slyvynsky | https://www.lyrikline.org/en/authors/ostap-slyvynsky | https://literaturfestival.com/en/authors/ostap-slyvynsky/
+Oleh Kotsarev,M,1981,1980s,east_ukraine,kyiv,kyiv,Ukrainian,Ukrainian,Ukrainian,no,born: Kharkiv (22 Aug 1981); Jan 2022: kyiv; current: kyiv (Bucha Kyiv Oblast per NYBooks 2023); PEN: PEN member,https://chytomo.com/en/authors/oleh-kotsarev-en/ | https://www.nybooks.com/contributors/oleh-kotsarev/ | https://www.meridiancz.com/en/oleh-kotsarev/
+Pavlo Korobchuk,unknown,,unknown,unknown,unknown,unknown,Ukrainian,Ukrainian,Ukrainian,no,PENDING: co-author DAY AND NIGHT! (2007) with Kotsarev; birth year/place not confirmed; writes Ukrainian; recommend Research-mode follow-up,https://chytomo.com/en/authors/oleh-kotsarev-en/
+Maria Galina,F,1958,pre_1970,born_abroad,south_ukraine,south_ukraine,Russian,Russian,Russian,no,born: Kalinin/Tver Russia (born_abroad); grew up Kyiv then Odesa; left Moscow Jan 2022 for Odesa; PEN: PEN member,https://en.wikipedia.org/wiki/Maria_Galina | https://pen.org.ua/en/members/galina-mariya | https://publishingperspectives.com/2022/03/ukraine-maria-galina-on-the-russian-language-as-a-trigger/
+Ivan Andrusiak,M,1968,pre_1970,west_ukraine,kyiv,kyiv,Ukrainian,Ukrainian,Ukrainian,no,born: Verbovets Kosiv district Ivano-Frankivsk Oblast (28 Dec 1968); Jan 2022: kyiv; current: kyiv (Berezan Kyiv Oblast); Fontan Kazok publisher editor; PEN: PEN member,https://pen.org.ua/en/members/andrusyak-ivan-myhajlovych | https://www.ibby.org/archive-storage/12_HCAA_Dossiers/2020_Authors/Andrusyak_2.pdf | http://fontan-book.com/en/authors-en/ivan-andrusyak
+Oles Ilchenko,unknown,,unknown,unknown,unknown,unknown,unknown,Ukrainian,Ukrainian,no,PENDING: name shared with multiple Ukrainian writers; disambiguation needed; recommend Research-mode follow-up,
+Yaryna Chornohuz,F,1995,1990s,kyiv,kyiv,east_ukraine,Ukrainian,Ukrainian,Ukrainian,no,born: Kyiv (1995); Jan 2022: kyiv; current: east_ukraine (frontline Donbas/Kherson); 140th Marine Recon combat medic/drone op since 2019; 2024 Shevchenko Prize; PEN: PEN member,https://en.wikipedia.org/wiki/Yaryna_Chornohuz | https://kyivindependent.com/in-every-woman-there-is-a-soldier-yaryna-chornohuz-the-brave-poet-fighting-russia/ | https://www.arrowsmithpress.com/journal/featured-poets-marchant-chornohuz
+Artur Dron,unknown,,unknown,unknown,unknown,unknown,Ukrainian,Ukrainian,Ukrainian,no,Lviv-based soldier-poet; Old Lion Publishing pre-war; 125th Separate TRO Brigade; author We Were Here (Jantar 2024); birth year/place not confirmed,https://www.exetercityofliterature.com/devon-literary-projects/ukrainian-war-poetry | https://pen.org.ua/en/autors/musakovska-yuliya
+Vasyl Makhno,M,1964,pre_1970,west_ukraine,diaspora,diaspora,Ukrainian,Ukrainian,Ukrainian,no,born: Chortkiv Ternopil Oblast (8 Oct 1964); in NYC since 2000 → diaspora; PEN: PEN member; other locations: New York,https://en.wikipedia.org/wiki/Vasyl_Makhno | https://www.wordsforwar.com/vasyl-makhno-bio | https://www.fekt.org/vasyl-makhno/
+Alie Kenzhalieva,unknown,,unknown,unknown,unknown,unknown,unknown,Russian,Russian,no,PENDING: likely Crimean Tatar heritage (Kenzhalieva); not searched in batch; recommend Research-mode follow-up,
+Arkadii Shtypel,M,,unknown,born_abroad,south_ukraine,south_ukraine,Russian,,,,husband of Maria Galina; moved Moscow to Odesa Jan 2022; birth year/place not confirmed in batch; PEN: PEN member,https://www.rbth.com/literature/2012/10/10/all_the_faces_of_galina_18983.html | https://publishingperspectives.com/2022/03/ukraine-maria-galina-on-the-russian-language-as-a-trigger/
+Yanis Sinayko,unknown,,unknown,unknown,unknown,unknown,unknown,,,,PENDING: no reliable source found in batch; recommend Research-mode follow-up,
+Natalia Belczenko,F,,unknown,kyiv,kyiv,unknown,bilingual,,,,Kyiv-based; shifted Russian to Ukrainian per Glaser; Lviv Book Forum prize ~2022; birth year and current location not confirmed in batch,https://associationforjewishstudies.org/contemporary-in-justice-more-than-war-songs-what-ukraine-s-poets-teach-us-about-language-and-community
+Maksym Kryvtsov,M,1990,1990s,west_ukraine,west_ukraine,east_ukraine,Ukrainian,,,,born: Rivne (22 Jan 1990); KIA 7 Jan 2024 Kharkiv region; Hero of Ukraine posthumous 2025; volunteered Right Sector 2014; rejoined Feb 2022,https://en.wikipedia.org/wiki/Maksym_Kryvtsov | https://kyivindependent.com/ukrainian-poet-maksym-kryvtsov-killed-on-front-line/ | https://war.ukraine.ua/heroes/ukrainian-poet-maksym-kryvtsov-was-killed-in-action-on-january-7/
+Anatoliy Dnistrovyi,unknown,,unknown,unknown,unknown,unknown,Ukrainian,,,,Ukrainian poet/critic; birth year/place not confirmed in batch; incidental lit-criticism sources only,https://news.exeter.ac.uk/faculty-of-humanities-arts-and-social-sciences/uk-ukraine-partnership-brings-wartime-poetry-to-the-world/
+Олександр Ірванець,M,1961,pre_1970,west_ukraine,kyiv,kyiv,Ukrainian,,,,Cyrillic alias of Oleksandr Irvanets (row 4); identical biography; born: Lviv; raised Rivne; Irpin; Bu-Ba-Bu co-founder; PEN: PEN member,https://en.wikipedia.org/wiki/Oleksandr_Irvanets | https://pen.org.ua/en/members/irvanets-oleksandr | https://www.wikidata.org/wiki/Q3489996
+Dasha Suzdalova,unknown,,unknown,unknown,unknown,unknown,unknown,,,,PENDING: no reliable source found in batch; recommend Research-mode follow-up,
+Pavlo Vol’vach,unknown,,unknown,unknown,unknown,unknown,unknown,,,,PENDING: source-side reconciliation — Glaser indicates two poets may share this name; no disambiguating biographical detail found,
+Oksana Kutsenko,unknown,,unknown,unknown,unknown,unknown,unknown,,,,PENDING: no reliable source found in batch; recommend Research-mode follow-up,
+Stanislav Chernilevsky,unknown,,unknown,unknown,unknown,unknown,unknown,,,,PENDING: filmmaker and poet Soviet generation per various sources; not searched in batch; recommend Research-mode follow-up,
+Alex Kocharian,unknown,,unknown,unknown,unknown,unknown,unknown,,,,PENDING: no reliable source found in batch; recommend Research-mode follow-up,
+Luba Iakymchuk,F,1985,1980s,east_ukraine,kyiv,kyiv,Ukrainian,,,,born: Pervomaisk Luhansk Oblast (1985); family displaced 2014; Jan 2022: kyiv; current: kyiv; Grammys 2022 with John Legend; PEN: PEN member,https://en.wikipedia.org/wiki/Lyuba_Yakimchuk | https://www.versopolis.com/poet/337/lyuba-yakimchuk | https://www.wordsforwar.com/lyuba-yakimchuk-bio | https://poetry.gatech.edu/bio/lyuba-yakimchuk
+Marina Ponomarenko,unknown,,unknown,unknown,unknown,unknown,unknown,,,,PENDING: no reliable source found in batch; recommend Research-mode follow-up,
+Evheniia Chupryna,unknown,,unknown,unknown,unknown,unknown,unknown,,,,PENDING: no reliable source found in batch; recommend Research-mode follow-up,
+Iryna Tsilyk,F,1982,1980s,kyiv,kyiv,kyiv,Ukrainian,,,,born: Kyiv (18 Nov 1982); filmmaker (Sundance 2020 The Earth Is Blue as an Orange); PEN: PEN member,https://en.wikipedia.org/wiki/Iryna_Tsilyk
+Pavlo Vyshebaba,unknown,,unknown,unknown,unknown,unknown,Ukrainian,,,,soldier-poet post-2022 invasion; birth year/place not confirmed in batch,https://www.londonukrainianreview.org/posts/when-words-fail-to-protect-your-culture
+Malva Krzhanivska,unknown,,unknown,unknown,unknown,unknown,unknown,,,,PENDING: no reliable source found in batch; recommend Research-mode follow-up,
+Oleg Kadanov,unknown,,unknown,unknown,unknown,unknown,unknown,,,,PENDING: name associated with Kharkiv rock band; possible musician-poet; recommend Research-mode follow-up,
+Oksana Lutsyshyna,F,1974,1970s,west_ukraine,diaspora,diaspora,Ukrainian,,,,born: Uzhhorod (10 Oct 1974); PhD U Georgia; asst prof U Texas Austin → diaspora; 2021 Shevchenko Prize novel Ivan and Phoebe; PEN: PEN member; other locations: Austin,https://en.wikipedia.org/wiki/Oksana_Lutsyshyna | https://pen.org.ua/en/members/lutsyshyna-oksana | https://www.poetryfoundation.org/poets/oksana-lutsyshyna
+Victoria Amelina,F,1986,1980s,west_ukraine,west_ukraine,west_ukraine,Ukrainian,,,,born: Lviv (1 Jan 1986); brief childhood Canada; lived Lviv; KIA 1 Jul 2023 (Kramatorsk strike injuries); Joseph Conrad Award 2021; deceased before archive freeze,https://en.wikipedia.org/wiki/Victoria_Amelina | https://kyivindependent.com/pen-ukraine-writer-victoria-amelina-dies-following-kramatorsk-strike/ | https://www.rferl.org/a/ukraine-kramatorsk-writer-amelina/32486666.html
+Marianna Kijanowska,F,1973,1970s,west_ukraine,west_ukraine,west_ukraine,Ukrainian,,,,born: Zhovkva Lviv Oblast (17 Nov 1973); Jan 2022: west_ukraine (Lviv); current: west_ukraine (Lviv); 2020 Shevchenko Prize; 2022 Herbert Prize Voices of Babyn Yar; PEN: PEN member,https://en.wikipedia.org/wiki/Marianna_Kiyanovska | https://fundacjaherberta.com/en/marianna-kiyanovska-laureate-of-the-zbigniew-herbert-international-literary-award-2022/ | https://slavic.uchicago.edu/news-events/events/marianna-kiyanovska-voices-babyn-yar
+Marjana Savka,F,1973,1970s,west_ukraine,west_ukraine,west_ukraine,Ukrainian,,,,born: Kopychyntsi Ternopil Oblast (21 Feb 1973); Jan 2022: west_ukraine (Lviv); current: west_ukraine (Lviv); co-founder/chief editor Vydavnytstvo Staroho Leva; 2025 Woman of Ukraine Award; PEN: PEN member,https://en.wikipedia.org/wiki/Mariana_Savka | https://www.wordsforwar.com/marjana-savka-bio | https://chytomo.com/en/marjana-savka-made-laureate-of-woman-of-ukraine-award/
+Igor Pomerantsev,M,1948,pre_1970,born_abroad,diaspora,diaspora,Russian,,,,born: Saratov Russia (born_abroad); grew up Chernivtsi; Prague since mid-1990s → diaspora; father of Peter Pomerantsev; PEN: PEN member; other locations: Prague,https://www.lyrikline.org/en/authors/igor-pomerantsev | https://english.radio.cz/igor-pomerantsev-bbc-and-daniel-defoe-helped-me-understand-democracy-8835106 | https://www.eurozine.com/authors/pomerantsev-igor/
+Kateryna Yegorushkina,unknown,,unknown,unknown,unknown,unknown,unknown,,,,PENDING: children's-book author; may need disambiguation; recommend Research-mode follow-up,
+Tetiana Vlasova,unknown,,unknown,unknown,unknown,unknown,unknown,,,,PENDING: no reliable source found in batch; recommend Research-mode follow-up,
+Iryna Starovoyt,unknown,,unknown,unknown,unknown,unknown,Ukrainian,,,,Lviv-based literary scholar and poet; birth year/place not confirmed in batch; incidental Babyn Yar panel sources,https://ukrainianjewishencounter.org/en/the-holocaust-has-become-part-of-ukraines-history-marianna-kiyanovska-talks-about-the-voices-of-babyn-yar/
+Katia Bl'ostka,,,,,,,,,,,,
+Natala Tkachyk,,,,,,,,,,,,
+Olena Huseinova,F,1979,1970s,,,,,,,,PEN: PEN member,
+Olga Bragina,F,1981,1980s,kyiv,,kyiv,Russian,,,,,
+Kateryna Mikhalitsyna,F,1982,1980s,west_ukraine,,west_ukraine,Ukrainian,,,,PEN: PEN member,
+Lesyk Panasiuk,M,,,central_ukraine,,kyiv,Ukrainian,,,,,
+Anna Malihon,,,,,,,,,,,PEN: PEN member,
+Dmitry Blizniuk,,,,,,,,,,,,
+павло вольвач,,,,,,,,,,,PENDING: xlsx row 207 aliases павло вольвач to Pavlo Vol'vach; Amelia 2025-05 says these are TWO distinct poets. Fields blanked until source-side reconciliation by Paige.,
+Anatoly Lemysh,M,,,kyiv,,kyiv,,,,,other locations: Moscow,
+Andriy Lyubka,M,1987,1980s,born_abroad,,west_ukraine,Ukrainian,,,,PEN: PEN member; other locations: Vynohradiv,
+Ilya Rissenberg,M,,,east_ukraine,,,,,,,,
+Oksana Yablonska,,,,,,,,,,,,
+Stanislav Belsky,,,,central_ukraine,,,,,,,,
+Teodoziya Zarivna,,,,,,,,,,,PEN: PEN member,
+Yuriy Matevoshchuk,M,,,,,,,,,,PEN: PEN member,
+Aleksei Tsvetkov,M,1947,pre_1970,west_ukraine,,diaspora,Russian,,,,,
+Mariia Tytarenko,F,,,,,,Ukrainian,,,,PEN: PEN member; other locations: Lviv,
+Maxim Borodin,,,,,,,,,,,,
+Mykola Voskalo,,,,,,,,,,,,
+Vasyl Herasymiuk,,,,,,,,,,,,
+Vasyl Lozynskyy,,,,,,,,,,,,
+Anatoliy Matviichuk,,,,,,,,,,,,
+Hrytsko Chubai,,,,,,,,,,,,
+Ihor Bozhko,M,,,south_ukraine,,south_ukraine,,,,,,
+Lilia Budzhurova,,,,,,,,,,,,
+Marta Mokhnatska,,,,,,,,,,,,
+Natalie Domova,F,,,,,west_ukraine,Ukrainian,,,,,
+Natalka Marinchak,F,,,east_ukraine,,east_ukraine,Ukrainian,,,,,
+Olesya Mamchych,,,,,,,,,,,,
+Svitlana Povalyaeva,F,1974,1970s,kyiv,,,Ukrainian,,,,PEN: PEN member,
+Aleksandr Bashlachev,M,,,born_abroad,,,,,,,,
+Aleksandr Motsar,M,1975,1970s,central_ukraine,,kyiv,Russian,,,,,
+Aleksandra Smilianskaia,,,,,,,,,,,,
+Alim Aliev,,,,crimea,,,,,,,PEN: PEN member,
+Alla Akimenko,,,,,,,,,,,,
+Anna Gruver,F,,,east_ukraine,,kyiv,Ukrainian,,,,other locations: Lviv,
+Bohdan Rubchak,,,,,,,,,,,,
+Dasha Hladun,,,,,,,,,,,,
+Dmitrii Karateev,M,,,kyiv,,kyiv,,,,,,
+Dmitry Chekalkin,,,,,,,,,,,,
+Evgenii Piven,,,,,,,,,,,,
+Igor Sydorenko,,,,,,,,,,,,
+Ilya Chernilevskyi,M,1991,1990s,kyiv,kyiv,,Ukrainian,,,,PEN: PEN member,
+Ivanna Skyba-Yakubova,,,,,,,,,,,,
+Katerina Biletina,,,,,,,,,,,,
+Kateryna Devdera,,,,central_ukraine,,,,,,,,
+Kirill Novikov,,,,,,,,,,,,
+Konstantin Muskalets,,,,,,,,,,,,
+Lina Kostenko,,,,,,,,,,,,
+Nina Vinogradova,F,,,east_ukraine,,,,,,,,
+Oleksandr Shumilin,,,,,,,,,,,,
+Olena Herasymyuk,,,,,,,,,,,,
+Olena Rybka,F,1984,1980s,,,,,,,,,
+Olena Stepanenko,F,1974,1970s,,,,Ukrainian,,,,PEN: PEN member,
+Ruslana Lyzhychko,,,,,,,,,,,,
+Sergei Solovyov,,,,,,,,,,,,
+Sergey Sinoptik,,,,,,,,,,,,
+Serhii Rafalsky,,,,,,,,,,,,
+Stepan Protsiuk,M,1964,pre_1970,,,,Ukrainian,,,,PEN: PEN member,
+Svetlana Kostyuk,,,,,,,,,,,,
+Sviatoslav Vakarchuk,,,,,,,,,,,,
+Taras Lyuty,,,,,,,,,,,,
+Valeriy Puzik,,,,,,,,,,,,
+Vano Krueger,M,1986,1980s,kyiv,,,Ukrainian,,,,PEN: PEN member; other locations: Kyiv,
+Vasyl Holoborodek,,,,,,,,,,,,
+Vasyl' Holoborod'ko,M,1947,pre_1970,east_ukraine,,,Ukrainian,,,,,
+Volodymyr Vakulenko,,,,,,,,,,,,
+Yaroslav Dovhan,M,1956,pre_1970,west_ukraine,,,,,,,,
+Yurii Izdryk,M,1962,pre_1970,west_ukraine,,west_ukraine,Ukrainian,,,,,

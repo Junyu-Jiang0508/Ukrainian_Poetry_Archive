@@ -66,6 +66,7 @@ Schema columns (canonical order)
 * ``bilingual_switcher_corpus``  ∈  {``yes``, ``no``, ``unknown``}
   (empirical, derived from the corpus by the roster freeze stage)
 * ``notes`` (free text, optional)
+* ``references`` (pipe-separated source URLs; optional; not a model predictor)
 """
 
 from __future__ import annotations
@@ -163,6 +164,7 @@ SCHEMA: tuple[CovariateColumn, ...] = (
         time_anchor="empirical_period_1_vs_period_2_contrast",
     ),
     CovariateColumn("notes", None, time_anchor="free_text"),
+    CovariateColumn("references", None, time_anchor="free_text"),
 )
 
 
@@ -194,7 +196,7 @@ def _validate(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     out = df.copy()
     for col in SCHEMA:
         if col.name not in out.columns:
-            if col.name == "notes":
+            if col.name in ("notes", "references"):
                 out[col.name] = ""
             elif col.name == "birth_year":
                 out[col.name] = ""
@@ -254,11 +256,16 @@ def merge_onto_poem_table(
             if col.name == "author":
                 continue
             if col.name not in poem_df.columns:
-                poem_df = poem_df.assign(**{col.name: col.default_unknown})
+                default = (
+                    ""
+                    if col.name in ("notes", "references", "birth_year")
+                    else col.default_unknown
+                )
+                poem_df = poem_df.assign(**{col.name: default})
         return poem_df
     out = poem_df.merge(covariates, on="author", how="left")
     for col in SCHEMA:
-        if col.name in ("author", "notes", "birth_year"):
+        if col.name in ("author", "notes", "references", "birth_year"):
             continue
         out[col.name] = out[col.name].fillna(col.default_unknown)
     return out

@@ -270,10 +270,41 @@ def _canonicalize_params_cov(
 
 
 def _build_canonical_contrasts() -> list[tuple[str, dict[str, float]]]:
-    """The three confirmatory contrasts expressed in canonical term names."""
+    """The confirmatory contrasts expressed in canonical term names.
+
+    Post-refactor (2026-05): the BH-FDR family now covers all four cells of the
+    closed first/second-person quartet (1sg, 1pl, 2sg, 2pl_vy_true_plural) plus
+    the person×number×period three-way deviation. Earlier versions reported only
+    the 2sg and 1pl cell shifts plus the 3-way; the 1sg cell shift was implicit
+    in the bare ``period`` coefficient and the 2pl cell shift was encoded only
+    via the 3-way interaction, neither of which was on the BH family. Both are
+    now first-class contrasts.
+
+    Cell-level shifts derive from the treatment-coded log-odds expansion::
+
+        log-odds shift(1sg) = CANONICAL_PERIOD
+        log-odds shift(2sg) = CANONICAL_PERIOD + CANONICAL_PERSON_X_PERIOD
+        log-odds shift(1pl) = CANONICAL_PERIOD + CANONICAL_NUMBER_X_PERIOD
+        log-odds shift(2pl) = CANONICAL_PERIOD + CANONICAL_PERSON_X_PERIOD
+                                              + CANONICAL_NUMBER_X_PERIOD
+                                              + CANONICAL_PXNXPERIOD
+
+    The 3-way ``person_x_number`` contrast is retained for direct interpretation
+    of the deviation from cell-additivity.
+    """
     return [
+        ("P2_vs_P1_1sg_cell_shift", {CANONICAL_PERIOD: 1.0}),
         ("P2_vs_P1_2sg_cell_shift", {CANONICAL_PERIOD: 1.0, CANONICAL_PERSON_X_PERIOD: 1.0}),
         ("P2_vs_P1_1pl_cell_shift", {CANONICAL_PERIOD: 1.0, CANONICAL_NUMBER_X_PERIOD: 1.0}),
+        (
+            "P2_vs_P1_2pl_cell_shift",
+            {
+                CANONICAL_PERIOD: 1.0,
+                CANONICAL_PERSON_X_PERIOD: 1.0,
+                CANONICAL_NUMBER_X_PERIOD: 1.0,
+                CANONICAL_PXNXPERIOD: 1.0,
+            },
+        ),
         ("P2_vs_P1_person_x_number", {CANONICAL_PXNXPERIOD: 1.0}),
     ]
 
@@ -294,8 +325,20 @@ def _build_contrast_specs(names: list[str]) -> list[tuple[str, np.ndarray]]:
         return v
 
     tests = [
+        ("P2_vs_P1_1sg_cell_shift", _v({_term("P2_2022_plus"): 1.0})),
         ("P2_vs_P1_2sg_cell_shift", _v({_term("P2_2022_plus"): 1.0, _term("P2_2022_plus", "person"): 1.0})),
         ("P2_vs_P1_1pl_cell_shift", _v({_term("P2_2022_plus"): 1.0, _term("P2_2022_plus", "number"): 1.0})),
+        (
+            "P2_vs_P1_2pl_cell_shift",
+            _v(
+                {
+                    _term("P2_2022_plus"): 1.0,
+                    _term("P2_2022_plus", "person"): 1.0,
+                    _term("P2_2022_plus", "number"): 1.0,
+                    _term("P2_2022_plus", "person:number"): 1.0,
+                }
+            ),
+        ),
         ("P2_vs_P1_person_x_number", _v({_term("P2_2022_plus", "person:number"): 1.0})),
     ]
     return tests
@@ -307,12 +350,15 @@ def evaluate_contrasts_generic(
     long_df: pd.DataFrame,
     p_value_col: str = "p_value",
 ) -> pd.DataFrame:
-    """Compute the three confirmatory contrasts from a canonicalized ``(params, cov)`` pair.
+    """Compute the five confirmatory contrasts from a canonicalized ``(params, cov)`` pair.
 
-    ``params`` / ``cov`` must already be indexed by the canonical term names
-    emitted by :func:`_canonicalize_params_cov`. Missing canonical terms result
-    in NaN estimates rather than zeros so that engine-level dropouts (e.g. a
-    contrast that the conditional likelihood absorbs) are visible in the table.
+    The post-refactor BH family contains the four cell-level shifts
+    (1sg, 2sg, 1pl, 2pl_vy_true_plural) plus the person×number×period three-way
+    deviation. ``params`` / ``cov`` must already be indexed by the canonical
+    term names emitted by :func:`_canonicalize_params_cov`. Missing canonical
+    terms result in NaN estimates rather than zeros so that engine-level
+    dropouts (e.g. a contrast that the conditional likelihood absorbs) are
+    visible in the table.
     """
     names = params.index.astype(str).tolist()
     name_pos = {n: i for i, n in enumerate(names)}
@@ -612,7 +658,12 @@ def build_per_author_contrasts(long_df: pd.DataFrame) -> pd.DataFrame:
         except Exception:
             continue
         cdf = evaluate_contrasts(fit, ad)
-        for cname in ("P2_vs_P1_1pl_cell_shift", "P2_vs_P1_2sg_cell_shift"):
+        for cname in (
+            "P2_vs_P1_1sg_cell_shift",
+            "P2_vs_P1_2sg_cell_shift",
+            "P2_vs_P1_1pl_cell_shift",
+            "P2_vs_P1_2pl_cell_shift",
+        ):
             rr = cdf[cdf["contrast"].eq(cname)]
             if rr.empty:
                 continue
@@ -655,8 +706,15 @@ def plot_forest(main_df: pd.DataFrame, sens_df: pd.DataFrame, out_path: Path) ->
 def plot_caterpillar(per_author: pd.DataFrame, out_path: Path) -> None:
     if per_author.empty:
         return
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6), sharex=False)
-    for i, cname in enumerate(["P2_vs_P1_2sg_cell_shift", "P2_vs_P1_1pl_cell_shift"]):
+    cells_to_plot = [
+        "P2_vs_P1_1sg_cell_shift",
+        "P2_vs_P1_2sg_cell_shift",
+        "P2_vs_P1_1pl_cell_shift",
+        "P2_vs_P1_2pl_cell_shift",
+    ]
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10), sharex=False)
+    axes = axes.flatten()
+    for i, cname in enumerate(cells_to_plot):
         ax = axes[i]
         d = per_author[per_author["contrast"] == cname].sort_values("estimate_logit")
         y = np.arange(len(d))
@@ -895,8 +953,9 @@ def main() -> None:
                 "data; the author intercept is eliminated via the conditional likelihood, "
                 "avoiding incidental-parameter bias at N≈33.\n\n")
         f.write("BH q-values are reported both within each engine ")
-        f.write("(`q_value_bh_within_engine`) and pooled across the 6-row family ")
-        f.write("(`q_value_bh_pooled`). Convergence and engine availability are recorded in ")
+        f.write("(`q_value_bh_within_engine`) and pooled across the 10-row family ")
+        f.write("(`q_value_bh_pooled`; 5 contrasts × 2 engines). Convergence and engine ")
+        f.write("availability are recorded in ")
         f.write("`coprimary_engine_status.json`.\n\n")
         f.write("## Sensitivity (demoted)\n\n")
         f.write("`confirmatory_contrasts_main.csv` retains the legacy unconditional GLM with ")
