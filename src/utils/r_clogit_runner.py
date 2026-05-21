@@ -159,6 +159,10 @@ jsonlite_or_naive <- function(x) {
       v_str <- paste0('"', gsub('\\\\', '\\\\\\\\', gsub('"', '\\\\"', v)), '"')
     } else if (length(v) == 0 || (length(v) == 1 && is.na(v))) {
       v_str <- "null"
+    } else if (is.numeric(v) && length(v) == 1 && !is.finite(v)) {
+      # JSON spec forbids Infinity / NaN tokens; emit a quoted sentinel string
+      # so Python's json.loads succeeds and the consumer can detect it.
+      v_str <- if (is.nan(v)) '"NaN"' else if (v > 0) '"Infinity"' else '"-Infinity"'
     } else {
       v_str <- as.character(v)
     }
@@ -252,13 +256,30 @@ def fit_clogit(
     except json.JSONDecodeError as exc:
         raise RClogitFitError(f"Could not parse meta.json: {exc}\nContents:\n{meta_raw}") from exc
 
+    raw_ll = meta.get("log_likelihood", np.nan)
+    if isinstance(raw_ll, str):
+        # R sentinel strings written by jsonlite_or_naive when the value is
+        # non-finite (e.g. clogit returned log-likelihood = -Inf at separation).
+        if raw_ll == "-Infinity":
+            ll = -np.inf
+        elif raw_ll == "Infinity":
+            ll = np.inf
+        elif raw_ll == "NaN":
+            ll = np.nan
+        else:
+            ll = float("nan")
+    elif raw_ll is None:
+        ll = np.nan
+    else:
+        ll = float(raw_ll)
+
     return RClogitFitResult(
         params=params,
         cov=vcov_df.astype(float),
         n_obs=int(meta.get("n_obs", 0)),
         n_strata=int(meta.get("n_strata", 0)),
         n_strata_informative=int(meta.get("n_strata_informative", 0)),
-        log_likelihood=float(meta.get("log_likelihood", np.nan)),
+        log_likelihood=ll,
         convergence_message=str(meta.get("convergence_message", "") or ""),
         formula=str(meta.get("formula", predictors_formula)),
     )

@@ -182,6 +182,24 @@ def _fit_via_r(trials: pd.DataFrame, dropped: list[str]) -> ConditionalLogitResu
     status = "converged"
     if r_result.convergence_message:
         status = f"converged_with_message: {r_result.convergence_message}"
+    if not np.isfinite(r_result.log_likelihood):
+        # clogit returned parameters but the partial likelihood is non-finite —
+        # the fit is degenerate (separation, perfect collinearity, or near-zero
+        # within-stratum information). Treat as a failure so downstream consumers
+        # do not propagate untrustworthy params.
+        return ConditionalLogitResult(
+            params=pd.Series(dtype=float),
+            cov=pd.DataFrame(dtype=float),
+            n_trials=int(r_result.n_obs),
+            n_authors_used=n_authors_used,
+            n_authors_dropped=len(dropped),
+            dropped_authors=dropped,
+            convergence_status=(
+                f"fit_error: degenerate clogit (log_likelihood={r_result.log_likelihood}); "
+                "likely within-author separation in the trial-level expansion of the four-cell "
+                "design. Use the lme4 GLMM as the primary engine for this stratum."
+            ),
+        )
 
     return ConditionalLogitResult(
         params=params,

@@ -7,7 +7,7 @@
 \setmainfont{Latin Modern Roman}
 
 \usepackage{graphicx}% For including graphics
-\graphicspath{{figures/}}% Figures live in ./figures/ next to main.tex (Overleaf-friendly)
+\graphicspath{{figures_png/}{figures/}}% Figures live in ./figures/ next to main.tex (Overleaf-friendly)
 \usepackage{booktabs}% Required by the publication tables below
 \usepackage{subfigure}% Support for small, `sub' figures and tables
 %\usepackage[nolists,tablesfirst]{endfloat}% To `separate' figures and tables from text if required
@@ -102,7 +102,7 @@ record. Poets in this archive operate as self-selected articulators of the natio
 
 \subsection{Ukrainian Wartime Poetry as Political Discourse}
 
-A substantial body of scholarship on Ukrainian wartime poetry has emerged since 2014 and expanded rapidly after the 2022 full-scale invasion. \citet{ilchuk2017hearing} provides the first major anglophone treatment of literary responses to the Donbas conflict, showing how Zhadan and his contemporaries mobilize poetry and prose to reframe regional attachment as civic Ukrainian belonging. The \emph{Words for War} anthology \citep{maksymchuk2017words} positions post-2014 poetry as an act of national self-constitution. \citet{Glaser2020}, in \emph{Songs in Dark Times}, traces how minority-language poets build cross-ethnic solidarity through verse, and \citet{glaser2023mine} shows how contemporary Ukrainian poets weave memories of the Holocaust, Holodomor, and Crimean Tatar deportation into a civic-pluralist national identity. \citet{kukulin2017the, kukulin2024writing} and \citet{parts2024in} take up the Russophone case, examining how poets writing in the aggressor's language reposition the lyric ``I'' against the Russian state, while \citet{blacker2019memory} situates comparable literary memory work in post-traumatic East Central European cities. The present study reads contemporary Ukrainian poetry against an established mnemonic register in which war reorganizes the national literary corpus and inherited trauma is reactivated through present-tense wartime address \citep{fussell2013the, Hirsch2012the}, drawing on adjacent work on communicative memory, unclaimed experience, and mourning ritual \citep{winter1995sites, caruth1996unclaimed, assmann1995collective}.
+A substantial body of scholarship on Ukrainian wartime poetry has emerged since 2014 and expanded rapidly after the 2022 full-scale invasion. \citet{ilchuk2017hearing} provides the first major anglophone treatment of literary responses to the Donbas conflict, showing how Zhadan and his contemporaries mobilize poetry and prose to reframe regional attachment as civic Ukrainian belonging. The \emph{Words for War} anthology \citep{maksymchuk2017words} positions post-2014 poetry as an act of national self-constitution. \citet{Glaser2020}, in \emph{Songs in Dark Times}, traces how minority-language poets build cross-ethnic solidarity through verse, and \citet{glaser2023mine} shows how contemporary Ukrainian poets weave memories of the Holocaust, Holodomor, and Crimean Tatar deportation into a civic-pluralist national identity. \citet{kukulin2017the, kukulin2024writing} and \citet{parts2024in} take up the Russophone case, examining how poets writing in the aggressor's language reposition the lyric ``I'' against the Russian state, while \citet{blacker2019memory} situates comparable literary memory work in post-traumatic East Central European cities. The present study reads contemporary Ukrainian poetry against an established mnemonic register in which war reorganizes the national literary corpus and inherited trauma is reactivated through present-tense wartime address \citep{fussell2013the, hirsch2012the}, drawing on adjacent work on communicative memory, unclaimed experience, and mourning ritual \citep{winter1995sites, caruth1996unclaimed, assmann1995collective}.
 
 The most direct empirical antecedent of this paper is \citet{glaser2024archive}, which applies distant reading to the Contemporary Ukrainian Poetry Archive to track shifts in thematic and lexical content over time. That work establishes the corpus as analytically tractable but leaves three gaps that the present paper addresses. First, it does not analyze person-number pronouns as a structured grammatical inventory. Second, it does not adopt a within-author design that treats each poet as their own control. Third, it does not apply multiple-comparison correction to hypothesis tests across pronoun categories. RQ1 and RQ2 are designed to close these gaps: RQ1 estimates corpus-level within-author period effects on first- and second-person pronoun rates, with each poet serving as their own control, and RQ2 decomposes that aggregate effect into individual-author trajectories.
 
@@ -216,7 +216,7 @@ Figure~\ref{fig:rq1-pnum} renders the same compositional shift as a token-weight
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.85\textwidth]{fig_narr_7_person_number_redistribution.pdf}
+\includegraphics[width=0.85\textwidth]{fig_narr_7_person_number_redistribution.png}
 \caption{Pre-war (left) vs.\ wartime (right) token-weighted share matrices for the closed first/second-person quartet \{1sg, 1pl, 2sg, true-plural \textukrainian{ви}\}, roster authors only. Wartime tiles annotate the period delta in percentage points. The plural column reweights toward 1st-person between the two panels; the within-plural conditional 1pl share and the cross-product odds ratio are reported in the body text above.}
 \label{fig:rq1-pnum}
 \end{figure}
@@ -236,7 +236,7 @@ Figure~\ref{fig:rq1-timeseries} replots the 1pl share at annual resolution withi
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.95\textwidth]{fig_narr_1_time_series_we_rises.pdf}
+\includegraphics[width=0.95\textwidth]{fig_narr_1_time_series_we_rises.png}
 \caption{Annual mean 1pl share within the closed first/second-person quartet, 2013--2025, by language stratum. Large solid markers denote years with $\geq 10$ poems in the stratum; small faded markers denote sparse years (interpret cautiously). Shaded ribbons are bootstrap 95\,\% CI around the per-year mean. The vertical wine bar marks 24 February 2022.}
 \label{fig:rq1-timeseries}
 \end{figure}
@@ -292,7 +292,7 @@ Figure~\ref{fig:rq2-trajectories} displays each roster author's pre-2022 positio
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.98\textwidth]{fig_narr_2_author_trajectories.pdf}
+\includegraphics[width=0.98\textwidth]{fig_narr_2_author_trajectories.png}
 \caption{Author trajectories in the (1sg-share, 1pl-share) plane of the closed first/second-person quartet. Each arrow runs from the author's pre-2022 mean position (dot) to their wartime position (arrowhead). Faded cream arrows: full roster ($n = 33$). Highlighted colored arrows: eight narratively notable authors (female: burgundy, male: deep teal). Dashed grey diagonals mark constant total-1st-person share isolines.}
 \label{fig:rq2-trajectories}
 \end{figure}
@@ -307,7 +307,7 @@ Figure~\ref{fig:rq2-caterpillar} displays the per-author posterior total period-
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.92\textwidth]{fig_narr_8_caterpillar_1pl_focused.pdf}
+\includegraphics[width=0.92\textwidth]{fig_narr_8_caterpillar_1pl_focused.png}
 \caption{Per-author posterior total period-shift on the 1pl cell, pooled Ukrainian + Russian stratum. Each row is one author; thick segments are 95\,\% highest-density intervals; the thin vertical at zero marks the no-shift null; the dashed vertical marks the across-author population mean. Top-five authors (deep-teal) and bottom-five authors (burgundy) are labeled with their posterior-mean rate ratio; the middle band of $23$ authors is greyed for context. The secondary upper axis re-expresses the log-rate shift on the multiplicative rate-ratio scale.}
 \label{fig:rq2-caterpillar}
 \end{figure}
@@ -320,7 +320,7 @@ Figure~\ref{fig:rq2-cases} unpacks the author-level finding for six poets select
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.98\textwidth]{fig_narr_5_case_study_poets.pdf}
+\includegraphics[width=0.98\textwidth]{fig_narr_5_case_study_poets.png}
 \caption{Per-year 1pl share within the closed first/second-person quartet for six poets selected from the random-slope posteriors. Each panel is one poet; vertical wine bar marks 24 February 2022; small grey numbers above each dot are the poem count in that year. Biographic taglines beneath each title summarize the wartime context that the panel records.}
 \label{fig:rq2-cases}
 \end{figure}
@@ -343,7 +343,7 @@ Figure~\ref{fig:disc-cohort} disaggregates the four-cell quartet by generation c
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.98\textwidth]{fig_narr_4_generation_cohort_composition.pdf}
+\includegraphics[width=0.98\textwidth]{fig_narr_4_generation_cohort_composition.png}
 \caption{Cohort-by-period composition of the four-cell first/second-person attention quartet, roster authors only. Each pair compares pre-2022 (top bar) vs.\ post-2022 (bottom bar) corpus composition for one generation cohort. Cohort labels appear in the left margin; sample sizes (authors $\cdot$ poems) are inset on each bar. Cell colors: 1sg (slate), 1pl (rust), 2sg (gold), true-plural \textukrainian{ви} (forest). The 1990s cohort is the only one whose 1pl share more than doubles after the invasion.}
 \label{fig:disc-cohort}
 \end{figure}
@@ -360,7 +360,7 @@ Figure~\ref{fig:disc-map} projects the same heterogeneity onto the authors' regi
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.95\textwidth]{fig_narr_3_ukraine_birthplace_map.pdf}
+\includegraphics[width=0.95\textwidth]{fig_narr_3_ukraine_birthplace_map.png}
 \caption{Stylized tile map of Ukrainian sub-regions colored by the mean post-2022 minus pre-2022 change in the 1pl share within the closed quartet, computed over roster authors born in that sub-region. Side panel: off-map cohorts (born abroad). Diverging colorscale: cool tones $=$ wartime decline in 1pl share; warm tones $=$ wartime growth. Author counts inset on each tile.}
 \label{fig:disc-map}
 \end{figure}
@@ -399,7 +399,7 @@ Figure~\ref{fig:app-sample} reports the cell-by-level frequencies of the four ti
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.98\textwidth]{fig_narr_6_roster_sample_composition.pdf}
+\includegraphics[width=0.98\textwidth]{fig_narr_6_roster_sample_composition.png}
 \caption{Counts of authors in the modeled roster by each time-invariant covariate used in the RQ2 covariate-adjusted sensitivity layer ($n_{\text{authors}} = 33$). The four panels (gender, generation cohort, region of birth, empirical period-1 language) are the same factors that enter the hierarchical model in \S\ref{sec:results-rq2} and that anchor the biographical interpretation in \S\ref{sec:discussion-theory}.}
 \label{fig:app-sample}
 \end{figure}

@@ -280,24 +280,32 @@ def _build_canonical_contrasts() -> list[tuple[str, dict[str, float]]]:
     via the 3-way interaction, neither of which was on the BH family. Both are
     now first-class contrasts.
 
-    Cell-level shifts derive from the treatment-coded log-odds expansion::
+    Cell-level shifts derive from the treatment-coded log-odds expansion. With
+    ``person = 1 iff cell.startswith("1")`` and ``number = 1 iff cell.endswith("pl")``
+    (see :func:`build_poem_long_4cells`), the reference level is ``2sg``
+    (person=0, number=0) and the cell shifts unpack as::
 
-        log-odds shift(1sg) = CANONICAL_PERIOD
-        log-odds shift(2sg) = CANONICAL_PERIOD + CANONICAL_PERSON_X_PERIOD
-        log-odds shift(1pl) = CANONICAL_PERIOD + CANONICAL_NUMBER_X_PERIOD
-        log-odds shift(2pl) = CANONICAL_PERIOD + CANONICAL_PERSON_X_PERIOD
+        log-odds shift(2sg) = CANONICAL_PERIOD
+        log-odds shift(1sg) = CANONICAL_PERIOD + CANONICAL_PERSON_X_PERIOD
+        log-odds shift(2pl) = CANONICAL_PERIOD + CANONICAL_NUMBER_X_PERIOD
+        log-odds shift(1pl) = CANONICAL_PERIOD + CANONICAL_PERSON_X_PERIOD
                                               + CANONICAL_NUMBER_X_PERIOD
                                               + CANONICAL_PXNXPERIOD
 
     The 3-way ``person_x_number`` contrast is retained for direct interpretation
     of the deviation from cell-additivity.
+
+    Bug-fix note (2026-05-20): prior versions reported these contrasts under
+    swapped person labels (1sg↔2sg, 1pl↔2pl), because the docstring assumed the
+    opposite person-coding convention from what ``build_poem_long_4cells``
+    actually applies. Re-run 02a to regenerate the corrected CSVs.
     """
     return [
-        ("P2_vs_P1_1sg_cell_shift", {CANONICAL_PERIOD: 1.0}),
-        ("P2_vs_P1_2sg_cell_shift", {CANONICAL_PERIOD: 1.0, CANONICAL_PERSON_X_PERIOD: 1.0}),
-        ("P2_vs_P1_1pl_cell_shift", {CANONICAL_PERIOD: 1.0, CANONICAL_NUMBER_X_PERIOD: 1.0}),
+        ("P2_vs_P1_2sg_cell_shift", {CANONICAL_PERIOD: 1.0}),
+        ("P2_vs_P1_1sg_cell_shift", {CANONICAL_PERIOD: 1.0, CANONICAL_PERSON_X_PERIOD: 1.0}),
+        ("P2_vs_P1_2pl_cell_shift", {CANONICAL_PERIOD: 1.0, CANONICAL_NUMBER_X_PERIOD: 1.0}),
         (
-            "P2_vs_P1_2pl_cell_shift",
+            "P2_vs_P1_1pl_cell_shift",
             {
                 CANONICAL_PERIOD: 1.0,
                 CANONICAL_PERSON_X_PERIOD: 1.0,
@@ -325,11 +333,11 @@ def _build_contrast_specs(names: list[str]) -> list[tuple[str, np.ndarray]]:
         return v
 
     tests = [
-        ("P2_vs_P1_1sg_cell_shift", _v({_term("P2_2022_plus"): 1.0})),
-        ("P2_vs_P1_2sg_cell_shift", _v({_term("P2_2022_plus"): 1.0, _term("P2_2022_plus", "person"): 1.0})),
-        ("P2_vs_P1_1pl_cell_shift", _v({_term("P2_2022_plus"): 1.0, _term("P2_2022_plus", "number"): 1.0})),
+        ("P2_vs_P1_2sg_cell_shift", _v({_term("P2_2022_plus"): 1.0})),
+        ("P2_vs_P1_1sg_cell_shift", _v({_term("P2_2022_plus"): 1.0, _term("P2_2022_plus", "person"): 1.0})),
+        ("P2_vs_P1_2pl_cell_shift", _v({_term("P2_2022_plus"): 1.0, _term("P2_2022_plus", "number"): 1.0})),
         (
-            "P2_vs_P1_2pl_cell_shift",
+            "P2_vs_P1_1pl_cell_shift",
             _v(
                 {
                     _term("P2_2022_plus"): 1.0,
