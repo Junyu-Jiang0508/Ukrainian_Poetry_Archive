@@ -347,9 +347,32 @@ def fig2_author_trajectories(
         ax.scatter([x0], [y0], color="#B0A78F", s=14, alpha=0.55, zorder=3,
                    edgecolor="white", linewidth=0.4)
 
-    # Highlighted poets — colored by gender as a literary-friendly grouping
-    cov_subset = cov.set_index("author")["gender"].to_dict() if "gender" in cov.columns else {}
-    color_by_gender = {"F": "#9A1750", "M": "#2E5266", "NB": "#6B2C5C"}
+    # Highlighted poets — colored by documented wartime biographical SITUATION
+    # (the exogenous axis the surrounding prose argues about). Colour encodes
+    # situation, not outcome: the arrow geometry carries the direction of each
+    # poet's 1pl drift. Khersonsky sits in the displaced bucket (he fled Odesa
+    # for Italy after Feb 2022) even though his 1pl rose — displacement is not
+    # monolithically a withdrawal of the collective "we", and the bucket label
+    # is deliberately direction-neutral. Gender is not the narrative; using it
+    # as a colour would mis-cue the reader.
+    wartime_role = {
+        # Frontline / civic-military mobilization
+        "Ihor Mitrov":         "mobilized",
+        "Yaryna Chornohuz":    "mobilized",
+        "Iya Kiva":            "mobilized",
+        "Serhiy Zhadan":       "mobilized",
+        # Residentially stable (in place through the cutpoint, no displacement)
+        "Halyna Kruk":         "stable",
+        "Elizaveta Zharikova": "stable",
+        # Displaced through the cutpoint, in-country or abroad
+        "Hryhoryi Falkovych":  "displaced",  # elderly, evacuated within Ukraine
+        "Boris Khersonsky":    "displaced",  # fled Odesa -> Italy (diaspora)
+    }
+    color_by_role = {
+        "mobilized":  "#9A1750",  # deep crimson — energetic, mobilized
+        "stable":     "#2E5266",  # deep teal — anchored, in place
+        "displaced":  "#8B6F47",  # muted bronze — uprooted (in-country or abroad)
+    }
 
     hi_rows = wide[wide["author"].isin(annotate_set)]
     label_offsets = {
@@ -367,7 +390,7 @@ def fig2_author_trajectories(
         y0 = r[f"share_1pl_{PRE_PERIOD}"]
         x1 = r[f"share_1sg_{POST_PERIOD}"]
         y1 = r[f"share_1pl_{POST_PERIOD}"]
-        c = color_by_gender.get(str(cov_subset.get(r["author"], "")).strip(), "#444444")
+        c = color_by_role.get(wartime_role.get(r["author"], ""), "#444444")
         ax.annotate(
             "", xy=(x1, y1), xytext=(x0, y0),
             arrowprops=dict(arrowstyle="-|>", color=c, lw=1.8, alpha=0.95,
@@ -398,12 +421,14 @@ def fig2_author_trajectories(
         pad=12,
     )
 
-    # Legend: highlighted vs background + gender colors
+    # Legend: highlighted vs background + wartime-role colors
     handles = [
-        Line2D([], [], marker="o", linestyle="None", color=color_by_gender["F"],
-               label="Highlighted female poet", markersize=8),
-        Line2D([], [], marker="o", linestyle="None", color=color_by_gender["M"],
-               label="Highlighted male poet", markersize=8),
+        Line2D([], [], marker="o", linestyle="None", color=color_by_role["mobilized"],
+               label="Mobilized (frontline / civic-military role)", markersize=8),
+        Line2D([], [], marker="o", linestyle="None", color=color_by_role["stable"],
+               label="Residentially stable through cutpoint", markersize=8),
+        Line2D([], [], marker="o", linestyle="None", color=color_by_role["displaced"],
+               label="Displaced through cutpoint (in-country or abroad)", markersize=8),
         Line2D([], [], marker="o", linestyle="None", color="#B0A78F",
                label="Other roster author (faded)", markersize=6, alpha=0.6),
         Line2D([], [], marker=">", linestyle="-", color=COLOR_ANNOT,
@@ -421,7 +446,10 @@ def fig2_author_trajectories(
         0.5, -0.015,
         f"N = {len(wide)} roster authors with poems in both periods. "
         "Dashed diagonals mark constant total 1st-person share (20–80 %).  "
-        "Eight narratively notable poets highlighted by gender.",
+        "Eight narratively notable poets highlighted by documented wartime situation: "
+        "mobilized (frontline / civic-military), residentially stable, "
+        "or displaced (in-country or abroad). Colour encodes situation; the arrow "
+        "carries the direction of each poet's drift.",
         ha="center", fontsize=8.5, color=COLOR_RULE, fontstyle="italic",
     )
 
