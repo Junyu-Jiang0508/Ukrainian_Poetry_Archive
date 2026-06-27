@@ -10,10 +10,17 @@ __all__ = [
     "repository_root",
     "repository_root_for_script",
     "prepare_analysis_environment",
+    "canonical_pronoun_annotation_csv",
+    "CANONICAL_PRONOUN_ANNOTATION_RELPATH",
     "gpt_public_annotation_detailed_csv",
     "public_list_pronouns_detailed_csv",
     "filtering_processed_dir",
 ]
+
+# Canonical sentence-level pronoun annotation consumed by all modeling/reporting
+# stages. Now the source-side v2 detection (data/Annotated_Source/), replacing the
+# GPT translate-then-tag table. Override per-run with PRONOUN_ANNOTATION_CSV.
+CANONICAL_PRONOUN_ANNOTATION_RELPATH = ("data", "Annotated_Source", "pronoun_annotation_v2.csv")
 
 
 def repository_root_for_script(script_file: str | Path) -> Path:
@@ -45,6 +52,19 @@ def prepare_analysis_environment(
 
         matplotlib.use(matplotlib_backend)
     return root
+
+
+def canonical_pronoun_annotation_csv(root: Path | None = None) -> Path:
+    """Canonical sentence-level pronoun annotation for downstream stages.
+
+    Resolution order: ``$PRONOUN_ANNOTATION_CSV`` env override, else
+    ``<root>/data/Annotated_Source/pronoun_annotation_v2.csv``.
+    """
+    env = os.environ.get("PRONOUN_ANNOTATION_CSV")
+    if env:
+        return Path(env)
+    r = root if root is not None else repository_root()
+    return r.joinpath(*CANONICAL_PRONOUN_ANNOTATION_RELPATH)
 
 
 def gpt_public_annotation_detailed_csv(root: Path | None = None) -> Path:

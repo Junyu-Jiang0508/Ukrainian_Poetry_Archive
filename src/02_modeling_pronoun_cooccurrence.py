@@ -48,12 +48,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from utils.workspace import prepare_analysis_environment
+from utils.workspace import canonical_pronoun_annotation_csv, prepare_analysis_environment
 
 ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
 log = logging.getLogger(__name__)
 
-DEFAULT_INPUT = ROOT / "data" / "Annotated_GPT_rerun" / "pronoun_annotation.csv"
+DEFAULT_INPUT = canonical_pronoun_annotation_csv(ROOT)
 DEFAULT_OUTPUT = ROOT / "outputs" / "02_modeling_pronoun_cooccurrence"
 
 _TOKEN_RE = re.compile(r"[А-Яа-яҐґЄєІіЇїA-Za-z’']+", re.UNICODE)
@@ -219,7 +219,7 @@ def _render_graph_png(
     nx.draw_networkx_nodes(g, pos, node_color=node_colors, node_size=node_sizes, ax=ax)
     weights = np.array([d["weight"] for _, _, d in g.edges(data=True)])
     if len(weights) > 0:
-        w_norm = (weights - weights.min()) / (weights.ptp() + 1e-9)
+        w_norm = (weights - weights.min()) / (np.ptp(weights) + 1e-9)
         edge_widths = 0.4 + w_norm * 2.5
     else:
         edge_widths = 1.0

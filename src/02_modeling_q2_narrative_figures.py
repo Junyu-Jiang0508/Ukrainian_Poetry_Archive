@@ -36,6 +36,14 @@ import pandas as pd
 from matplotlib.lines import Line2D
 
 from utils.author_covariates import load_author_covariates
+from utils.wartime_location_encoding import (
+    is_at_frontline,
+    is_mobilized,
+    location_color,
+    legend_handles as location_legend_handles,
+    frontline_marker,
+    mobilization_marker,
+)
 from utils.workspace import prepare_analysis_environment
 
 ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
@@ -106,14 +114,102 @@ REGION_LABEL = {
     "diaspora": "Diaspora",
 }
 
-CASE_STUDY_POETS: list[tuple[str, str]] = [
-    ("Ihor Mitrov",        "b. 1991 Kerch; 95th Air Assault Brigade since Mar 2022"),
-    ("Iya Kiva",           "b. 1984 Donetsk; bilingual UA/RU; Lviv since 2022"),
-    ("Yaryna Chornohuz",   "b. 1995 Kyiv; 140th Marine Recon medic; Shevchenko Prize 2024"),
-    ("Serhiy Zhadan",      "b. 1974 Starobilsk; Kharkiv; 13th Khartia Brigade since May 2024"),
-    ("Boris Khersonsky",   "b. 1950 Chernivtsi; Odesa; Russian-primary; PEN member"),
-    ("Hryhoryi Falkovych", "b. 1940 Kyiv; Jewish-Ukrainian; evacuated to Kolomyia in 2022"),
+# Shared poet selection — single source of truth for the highlighted set in
+# fig2 and the case-study panel in fig5 (avoids the two lists drifting apart).
+# Data-driven and aligned with the corrected message (see
+# to_teacher_covariate_fix/anonymized_figures/README.md): the highlighted mix
+# tracks the roster's situation proportions instead of literary fame, and each
+# situation carries both a riser and a faller.
+#   situation: stayed | left   (per _situation_of; mobilized poets count as stayed)
+#   role:      riser | faller | flat
+#   case_study=True  -> also drawn as a fig5 small-multiple
+#   bio: short FACTUAL tagline (sourced from author_covariates_paper_roster_n33
+#        notes); used only in the non-anonymized fig5.
+POET_SELECTION: list[dict] = [
+    {"author": "Ihor Mitrov",          "situation": "stayed",    "role": "riser",  "case_study": True,
+     "bio": "b. 1991 Kerch; 95th Air Assault Brigade since Mar 2022"},
+    {"author": "Dmytro Lazutkin",      "situation": "stayed",    "role": "faller", "case_study": True,
+     "bio": "b. 1978 Kyiv; mobilized 2023, 47th Brigade; Shevchenko Prize 2024"},
+    {"author": "Iya Kiva",             "situation": "stayed",    "role": "riser",  "case_study": True,
+     "bio": "b. 1984 Donetsk; displaced to Lviv 2022; bilingual UA/RU"},
+    {"author": "Hryhoryi Falkovych",   "situation": "stayed",    "role": "faller", "case_study": True,
+     "bio": "b. 1940 Kyiv; evacuated to Kolomyia 2022; Jewish-Ukrainian poet"},
+    {"author": "Ludmila Khersonskaya", "situation": "left",      "role": "riser",  "case_study": True,
+     "bio": "b. 1964 Tiraspol; long in Odesa; Russian-language; in Europe since 2022"},
+    {"author": "Iryna Shuvalova",      "situation": "left",      "role": "faller", "case_study": True,
+     "bio": "b. 1986 Kyiv; PhD Cambridge; based abroad (Oslo)"},
+    # fig2-only highlights (not case studies): broaden situation coverage to ~roster mix.
+    {"author": "Halyna Kruk",          "situation": "stayed",    "role": "riser",  "case_study": False,
+     "bio": ""},
+    {"author": "Boris Khersonsky",     "situation": "left",      "role": "flat",   "case_study": False,
+     "bio": ""},  # kept solely as the covariate-correction exemplar (re-coded frontline->left)
 ]
+
+# fig5 case studies, in display order (rows = situation, left col = riser, right = faller).
+CASE_STUDY_POETS: list[tuple[str, str]] = [
+    (p["author"], p["bio"]) for p in POET_SELECTION if p["case_study"]
+]
+# fig2 highlighted set.
+HIGHLIGHT_AUTHORS: list[str] = [p["author"] for p in POET_SELECTION]
+
+
+# --- Anonymization (professor request) -----------------------------------
+# When active, poet names in the three identity-revealing figures (fig2, fig5,
+# fig8) are replaced by stable codes of the form ``<situation>_NN`` and the
+# identifying biographic taglines in fig5 are replaced by a generic descriptor.
+# Codes are assigned alphabetically *within* each situation group so the code
+# does not encode the plotted outcome (the rank), only the documented situation.
+_ANON: dict[str, str] | None = None          # real author -> code, when active
+_GENERIC_TAGLINE: dict[str, str] | None = None  # real author -> generic tagline
+_STEM_SUFFIX = ""                            # appended to every saved stem
+
+_SITUATION_LABEL = {
+    "stayed": "Remained in Ukraine",
+    "left": "Left Ukraine (exile)",
+    "unknown": "Situation unknown",
+}
+
+
+def _situation_of(mob: object, inua: object) -> str:
+    s = str(inua).strip().lower()
+    if s == "no":
+        return "left"
+    if s == "yes" or str(mob).strip().lower() == "yes":
+        return "stayed"
+    return "unknown"
+
+
+def build_anonymization(roster_csv: Path):
+    """Return (name->code, name->generic_tagline, key_dataframe)."""
+    cov = pd.read_csv(roster_csv, dtype=str, keep_default_na=False)
+    cov["situation"] = [
+        _situation_of(m, i) for m, i in zip(cov["mobilized"], cov["in_ukraine_wartime"])
+    ]
+    cov = cov.sort_values(["situation", "author"]).reset_index(drop=True)
+    code_map: dict[str, str] = {}
+    tagline_map: dict[str, str] = {}
+    counters: dict[str, int] = {}
+    rows = []
+    for _, r in cov.iterrows():
+        author = str(r["author"]).strip()
+        sit = r["situation"]
+        counters[sit] = counters.get(sit, 0) + 1
+        code = f"{sit}_{counters[sit]:02d}"
+        code_map[author] = code
+        lang = str(r.get("dominant_language_p2") or r.get("dominant_language_p1") or "").strip()
+        lang_txt = f"{lang}-language" if lang else "language n/a"
+        tagline_map[author] = f"{_SITUATION_LABEL[sit]} · {lang_txt}"
+        rows.append({"code": code, "author": author, "situation": sit,
+                     "dominant_language_p2": lang})
+    key = pd.DataFrame(rows).sort_values("code").reset_index(drop=True)
+    return code_map, tagline_map, key
+
+
+def _disp(name: object) -> str:
+    """Display name: the anonymized code when active, else the real name."""
+    if _ANON is None:
+        return str(name)
+    return _ANON.get(str(name).strip(), str(name))
 
 
 def _setup_style() -> None:
@@ -146,6 +242,7 @@ def _setup_style() -> None:
 
 
 def _save(fig: plt.Figure, out_dir: Path, stem: str) -> None:
+    stem = stem + _STEM_SUFFIX
     out_dir.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_dir / f"{stem}.pdf", bbox_inches="tight", facecolor=fig.get_facecolor())
     fig.savefig(out_dir / f"{stem}.png", bbox_inches="tight", facecolor=fig.get_facecolor())
@@ -178,6 +275,8 @@ def fig1_time_series_we_rises(df: pd.DataFrame, out_dir: Path) -> None:
     faded marker so the literary reader is not misled by single-year noise.
     """
     MIN_POEMS_PER_YEAR_STRICT = 10  # below this, fade the dot
+    MIN_POEMS_PER_YEAR_PLOT = 5     # below this, a yearly mean is not interpretable: drop it
+                                    # (e.g. Russian 2025 = 1 poem at 0.86, 2023 = 4 poems)
 
     d = df.copy()
     d["share_1pl"] = _quartet_share(d, "1pl")
@@ -191,6 +290,9 @@ def fig1_time_series_we_rises(df: pd.DataFrame, out_dir: Path) -> None:
             n_poems=("share_1pl", "size"),
         )
     )
+    # Drop years with too few poems to estimate a mean (single-poem outliers
+    # otherwise dominate the tail of the line — see the Russian 2023/2025 spikes).
+    yearly = yearly[yearly["n_poems"] >= MIN_POEMS_PER_YEAR_PLOT].reset_index(drop=True)
     rng = np.random.default_rng(42)
     ci_low: list[float] = []
     ci_high: list[float] = []
@@ -270,7 +372,8 @@ def fig1_time_series_we_rises(df: pd.DataFrame, out_dir: Path) -> None:
     fig.text(
         0.5, -0.02,
         f"Yearly mean share · 95 % bootstrap CI ribbons · large dots = ≥ {MIN_POEMS_PER_YEAR_STRICT} poems / year, "
-        "small faded dots = sparse year (interpret cautiously)."
+        f"small faded dots = {MIN_POEMS_PER_YEAR_PLOT}–{MIN_POEMS_PER_YEAR_STRICT - 1} poems (interpret cautiously); "
+        f"years with < {MIN_POEMS_PER_YEAR_PLOT} poems are omitted."
         f"  N = {int(yearly['n_poems'].sum())} poems · {len(years_present)} years.",
         ha="center", fontsize=8.5, color=COLOR_RULE, fontstyle="italic",
     )
@@ -324,10 +427,7 @@ def fig2_author_trajectories(
         ax.text(total + 0.008, 0.012, f"{int(total*100)}%",
                 color="#9F947E", fontsize=8, fontstyle="italic", alpha=0.9)
 
-    annotate_set = {
-        "Ihor Mitrov", "Iya Kiva", "Yaryna Chornohuz", "Serhiy Zhadan",
-        "Boris Khersonsky", "Hryhoryi Falkovych", "Halyna Kruk", "Elizaveta Zharikova",
-    }
+    annotate_set = set(HIGHLIGHT_AUTHORS)
 
     # Two-tier rendering: faded background for all, prominent for highlighted
     for _, r in wide.iterrows():
@@ -347,63 +447,54 @@ def fig2_author_trajectories(
         ax.scatter([x0], [y0], color="#B0A78F", s=14, alpha=0.55, zorder=3,
                    edgecolor="white", linewidth=0.4)
 
-    # Highlighted poets — colored by documented wartime biographical SITUATION
-    # (the exogenous axis the surrounding prose argues about). Colour encodes
-    # situation, not outcome: the arrow geometry carries the direction of each
-    # poet's 1pl drift. Khersonsky sits in the displaced bucket (he fled Odesa
-    # for Italy after Feb 2022) even though his 1pl rose — displacement is not
-    # monolithically a withdrawal of the collective "we", and the bucket label
-    # is deliberately direction-neutral. Gender is not the narrative; using it
-    # as a colour would mis-cue the reader.
-    wartime_role = {
-        # Frontline / civic-military mobilization
-        "Ihor Mitrov":         "mobilized",
-        "Yaryna Chornohuz":    "mobilized",
-        "Iya Kiva":            "mobilized",
-        "Serhiy Zhadan":       "mobilized",
-        # Residentially stable (in place through the cutpoint, no displacement)
-        "Halyna Kruk":         "stable",
-        "Elizaveta Zharikova": "stable",
-        # Displaced through the cutpoint, in-country or abroad
-        "Hryhoryi Falkovych":  "displaced",  # elderly, evacuated within Ukraine
-        "Boris Khersonsky":    "displaced",  # fled Odesa -> Italy (diaspora)
-    }
-    color_by_role = {
-        "mobilized":  "#9A1750",  # deep crimson — energetic, mobilized
-        "stable":     "#2E5266",  # deep teal — anchored, in place
-        "displaced":  "#8B6F47",  # muted bronze — uprooted (in-country or abroad)
-    }
+    # Highlighted poets — colour = remained vs left; shape = frontline vs not;
+    # label notes frontline when documented.
+    _cov_roster = pd.read_csv(ROOT / "data" / "author_covariates_paper_roster_n33.csv")
+    cov_by_author = _cov_roster.set_index("author")
 
     hi_rows = wide[wide["author"].isin(annotate_set)]
     label_offsets = {
-        "Ihor Mitrov":         (12, -18),
-        "Iya Kiva":            (10, 14),
-        "Yaryna Chornohuz":    (12, -22),
-        "Serhiy Zhadan":       (-20, 16),
-        "Boris Khersonsky":    (-110, -20),
-        "Hryhoryi Falkovych":  (-110, 14),
-        "Halyna Kruk":         (-90, -22),
-        "Elizaveta Zharikova": (12, 14),
+        "Ihor Mitrov":          (14, 16),
+        "Dmytro Lazutkin":      (12, -22),
+        "Iya Kiva":             (10, 16),
+        "Halyna Kruk":          (-92, 16),
+        "Hryhoryi Falkovych":   (-110, 12),
+        "Ludmila Khersonskaya": (12, 16),
+        "Iryna Shuvalova":      (-104, -18),
+        "Boris Khersonsky":     (-110, -20),
     }
     for _, r in hi_rows.iterrows():
         x0 = r[f"share_1sg_{PRE_PERIOD}"]
         y0 = r[f"share_1pl_{PRE_PERIOD}"]
         x1 = r[f"share_1sg_{POST_PERIOD}"]
         y1 = r[f"share_1pl_{POST_PERIOD}"]
-        c = color_by_role.get(wartime_role.get(r["author"], ""), "#444444")
+        row = cov_by_author.loc[r["author"]]
+        c = location_color(row.get("mobilized"), row.get("in_ukraine_wartime"),
+                           row.get("region_at_archive_freeze"))
+        mk = frontline_marker(
+            row.get("mobilized"), row.get("in_ukraine_wartime"),
+            row.get("region_at_archive_freeze"), row.get("notes"),
+        )
+        at_fl = is_at_frontline(
+            row.get("mobilized"), row.get("in_ukraine_wartime"),
+            row.get("region_at_archive_freeze"), row.get("notes"),
+        )
         ax.annotate(
             "", xy=(x1, y1), xytext=(x0, y0),
             arrowprops=dict(arrowstyle="-|>", color=c, lw=1.8, alpha=0.95,
                             shrinkA=0, shrinkB=0, mutation_scale=14),
             zorder=5,
         )
-        ax.scatter([x0], [y0], color=c, s=42, zorder=6,
+        ax.scatter([x0], [y0], color=c, marker=mk, s=44 if mk == "^" else 42, zorder=6,
                    edgecolor="white", linewidth=0.9)
         ax.scatter([x1], [y1], color=c, s=10, marker="s", zorder=6,
                    edgecolor="white", linewidth=0.4)
         dx, dy = label_offsets.get(r["author"], (10, 10))
+        label = _disp(r["author"])
+        if at_fl:
+            label = f"{label}\n(frontline)"
         ax.annotate(
-            r["author"],
+            label,
             xy=(x1, y1), xytext=(dx, dy),
             textcoords="offset points",
             fontsize=9.5, color=COLOR_ANNOT, fontweight="semibold",
@@ -421,37 +512,34 @@ def fig2_author_trajectories(
         pad=12,
     )
 
-    # Legend: highlighted vs background + wartime-role colors
-    handles = [
-        Line2D([], [], marker="o", linestyle="None", color=color_by_role["mobilized"],
-               label="Mobilized (frontline / civic-military role)", markersize=8),
-        Line2D([], [], marker="o", linestyle="None", color=color_by_role["stable"],
-               label="Residentially stable through cutpoint", markersize=8),
-        Line2D([], [], marker="o", linestyle="None", color=color_by_role["displaced"],
-               label="Displaced through cutpoint (in-country or abroad)", markersize=8),
+    # Legend: highlighted vs background + location / frontline encoding
+    handles = location_legend_handles(
+        include_frontline=True, include_arrow=True, ms=8,
+    )
+    handles.append(
         Line2D([], [], marker="o", linestyle="None", color="#B0A78F",
                label="Other roster author (faded)", markersize=6, alpha=0.6),
-        Line2D([], [], marker=">", linestyle="-", color=COLOR_ANNOT,
-               label="dot = pre-2022, arrow = wartime drift", markersize=8,
-               markeredgewidth=0.0),
-    ]
+    )
     ax.legend(handles=handles, loc="upper right",
+              title="colour = location; shape = frontline",
               title_fontsize=9.5, framealpha=0.95, edgecolor="#B0A78F",
               fancybox=True)
 
     ax.set_xlim(0, max(0.85, wide[[f"share_1sg_{PRE_PERIOD}", f"share_1sg_{POST_PERIOD}"]].max().max() * 1.08))
     ax.set_ylim(0, max(0.85, wide[[f"share_1pl_{PRE_PERIOD}", f"share_1pl_{POST_PERIOD}"]].max().max() * 1.10))
 
-    fig.text(
-        0.5, -0.015,
-        f"N = {len(wide)} roster authors with poems in both periods. "
-        "Dashed diagonals mark constant total 1st-person share (20–80 %).  "
-        "Eight narratively notable poets highlighted by documented wartime situation: "
-        "mobilized (frontline / civic-military), residentially stable, "
-        "or displaced (in-country or abroad). Colour encodes situation; the arrow "
-        "carries the direction of each poet's drift.",
-        ha="center", fontsize=8.5, color=COLOR_RULE, fontstyle="italic",
-    )
+    if _ANON is None:
+        fig.text(
+            0.5, -0.015,
+            f"N = {len(wide)} roster authors with poems in both periods. "
+            "Dashed diagonals mark constant total 1st-person share (20–80 %).  "
+            "Eight poets highlighted to span both wartime locations and both directions "
+            "of drift (remained / left), selected on the data rather than on fame. "
+            "Colour encodes location; triangle vs square encodes documented frontline "
+            "service; highlighted labels note frontline when applicable; "
+            "the arrow carries the direction of each poet's drift.",
+            ha="center", fontsize=8.5, color=COLOR_RULE, fontstyle="italic",
+        )
 
     _save(fig, out_dir, "fig_narr_2_author_trajectories")
     log.info("Wrote fig_narr_2_author_trajectories (n=%d authors)", len(wide))
@@ -776,9 +864,12 @@ def fig5_case_study_poets(df: pd.DataFrame, out_dir: Path) -> None:
             ax.text(r["year"], r["mean_share"] + 0.06,
                     f"{int(r['n_poems'])}", ha="center", va="bottom",
                     fontsize=8, color="#888")
-        # Poet title with bio tagline as subtitle inline (no in-plot box)
+        # Poet title with bio tagline as subtitle inline (no in-plot box).
+        # When anonymized, the identifying bio is replaced by a generic descriptor.
+        if _ANON is not None and _GENERIC_TAGLINE is not None:
+            tagline = _GENERIC_TAGLINE.get(poet, _SITUATION_LABEL["unknown"])
         ax.set_title(
-            f"{poet}\n", fontsize=12.0, fontweight="semibold",
+            f"{_disp(poet)}\n", fontsize=12.0, fontweight="semibold",
             color="#1f1f1f", pad=22, loc="left",
         )
         ax.text(
@@ -809,7 +900,8 @@ def fig5_case_study_poets(df: pd.DataFrame, out_dir: Path) -> None:
     )
     fig.text(0.5, 0.005,
              "Vertical wine line = 24 Feb 2022 invasion.  Small gray numbers above each dot = poems in that year. "
-             "Common x-axis: 2013 → present.",
+             "Common x-axis: 2013 → present.  Rows = wartime situation; left column = a 1pl riser, right = a faller.  "
+             "The «left» riser contributes few post-2022 poems, so its post-invasion series is sparse.",
              ha="center", fontsize=8.5, color=COLOR_RULE, fontstyle="italic")
     fig.tight_layout(rect=[0.0, 0.025, 1.0, 0.965], h_pad=2.4)
 
@@ -820,36 +912,41 @@ def fig5_case_study_poets(df: pd.DataFrame, out_dir: Path) -> None:
 # --- Figure 7: Q1 person×number redistribution ---------------------------
 
 def fig7_person_number_redistribution(df: pd.DataFrame, roster: pd.DataFrame, out_dir: Path) -> None:
-    """Pre vs wartime 2x2 share matrices of the closed first/second-person quartet.
+    """Calendar-period 1x2 share tiles for first-person cells (1sg, 1pl) only.
 
-    Two clean tile matrices side by side; small per-cell Δ annotations
-    (in percentage points) make the period delta legible inside the figure
-    itself. All interpretive prose --- including the within-plural conditional
-    share and the person×number odds ratio --- now lives in the body text
-    (\\S 4.1.4), not in an in-figure callout panel.
+    Two side-by-side panels (2014–2022 vs 2022–2025 by composition year);
+    the 2022–2025 panel annotates per-cell deltas in percentage points.
+    Denominator remains the closed four-cell quartet.
     """
     roster_set = set(roster.loc[roster["included"] == True, "author"].astype(str))
     d = df[df["author"].isin(roster_set)].copy()
-    d = d[d["period3"].isin([PRE_PERIOD, POST_PERIOD])]
     d = d[d["language_clean"].isin(["Ukrainian", "Russian"])]
+    d = d[d["year_int"].notna()]
+    d["year"] = d["year_int"].astype(int)
+    d = d[(d["year"] >= 2014) & (d["year"] <= 2025)]
     d["denom"] = d[list(QUARTET_CELLS)].sum(axis=1)
     d = d[d["denom"] > 0]
 
-    def _matrix(period: str) -> tuple[pd.DataFrame, int]:
-        sub = d[d["period3"] == period]
+    period_masks = {
+        "2014–2022": (d["year"] >= 2014) & (d["year"] < 2022),
+        "2022–2025": (d["year"] >= 2022) & (d["year"] <= 2025),
+    }
+
+    def _matrix(mask: pd.Series) -> tuple[pd.DataFrame, int]:
+        sub = d[mask]
         sums = sub[list(QUARTET_CELLS)].sum()
         denom = int(sub["denom"].sum())
         mat = pd.DataFrame(
             {
-                "singular": [float(sums["1sg"]) / denom, float(sums["2sg"]) / denom],
-                "plural":   [float(sums["1pl"]) / denom, float(sums["2pl_vy_true_plural"]) / denom],
+                "singular": [float(sums["1sg"]) / denom],
+                "plural":   [float(sums["1pl"]) / denom],
             },
-            index=["1st", "2nd"],
+            index=["1st"],
         )
         return mat, denom
 
-    pre_mat, pre_n = _matrix(PRE_PERIOD)
-    post_mat, post_n = _matrix(POST_PERIOD)
+    pre_mat, pre_n = _matrix(period_masks["2014–2022"])
+    post_mat, post_n = _matrix(period_masks["2022–2025"])
     delta_mat = post_mat - pre_mat  # percentage-point change
 
     from matplotlib.colors import LinearSegmentedColormap
@@ -858,18 +955,20 @@ def fig7_person_number_redistribution(df: pd.DataFrame, roster: pd.DataFrame, ou
     )
     vmax = float(max(pre_mat.values.max(), post_mat.values.max()))
 
-    fig = plt.figure(figsize=(9.6, 4.8))
+    fig = plt.figure(figsize=(7.2, 3.6))
     fig.patch.set_facecolor("white")
-    grid = fig.add_gridspec(1, 2, wspace=0.18)
+    grid = fig.add_gridspec(1, 2, wspace=0.22)
     ax_pre = fig.add_subplot(grid[0, 0])
     ax_post = fig.add_subplot(grid[0, 1])
     for ax in (ax_pre, ax_post):
         ax.set_facecolor("white")
 
+    cell_ids = {(0, 0): "1sg", (0, 1): "1pl"}
+
     def _draw_matrix(ax, mat: pd.DataFrame, period_label: str, n: int,
                       delta: pd.DataFrame | None = None) -> None:
-        for i, row_label in enumerate(mat.index):
-            for j, col_label in enumerate(mat.columns):
+        for i, _row_label in enumerate(mat.index):
+            for j, _col_label in enumerate(mat.columns):
                 v = float(mat.iloc[i, j])
                 color = cmap(v / vmax)
                 rect = mpatches.Rectangle(
@@ -878,26 +977,24 @@ def fig7_person_number_redistribution(df: pd.DataFrame, roster: pd.DataFrame, ou
                 )
                 ax.add_patch(rect)
                 text_color = "white" if v / vmax > 0.55 else "#1f1f1f"
-                ax.text(j + 0.48, -i - 0.42, f"{v*100:.1f}%",
+                ax.text(j + 0.48, -i - 0.38, f"{v*100:.1f}%",
                         ha="center", va="center",
-                        fontsize=16, fontweight="semibold", color=text_color)
-                cell_id = {(0, 0): "1sg", (0, 1): "1pl",
-                           (1, 0): "2sg", (1, 1): "2pl"}.get((i, j), "")
-                ax.text(j + 0.48, -i - 0.72, cell_id,
+                        fontsize=17, fontweight="semibold", color=text_color)
+                ax.text(j + 0.48, -i - 0.68, cell_ids.get((i, j), ""),
                         ha="center", va="center",
-                        fontsize=10, color=text_color, fontstyle="italic")
+                        fontsize=10.5, color=text_color, fontstyle="italic")
                 if delta is not None:
                     dv = float(delta.iloc[i, j]) * 100
                     sign = "+" if dv >= 0 else ""
-                    ax.text(j + 0.48, -i - 0.90, f"{sign}{dv:.1f} pp",
+                    ax.text(j + 0.48, -i - 0.86, f"{sign}{dv:.1f} pp",
                             ha="center", va="center",
                             fontsize=9.5, color=text_color, fontstyle="italic")
         ax.set_xlim(-0.05, 2.0)
-        ax.set_ylim(-2.15, 0.30)
+        ax.set_ylim(-1.25, 0.30)
         ax.set_xticks([0.48, 1.48])
         ax.set_xticklabels(["singular", "plural"], fontsize=11)
-        ax.set_yticks([-0.52, -1.52])
-        ax.set_yticklabels(["1st", "2nd"], fontsize=11)
+        ax.set_yticks([-0.52])
+        ax.set_yticklabels(["1st"], fontsize=11)
         ax.tick_params(left=False, bottom=False, pad=4)
         ax.set_aspect("equal")
         for s in ax.spines.values():
@@ -907,21 +1004,16 @@ def fig7_person_number_redistribution(df: pd.DataFrame, roster: pd.DataFrame, ou
             fontsize=11.5, fontweight="regular", pad=6,
         )
 
-    _draw_matrix(ax_pre, pre_mat, "Pre-war (2014–2021)", pre_n, delta=None)
-    _draw_matrix(ax_post, post_mat, "Wartime (2022–present)", post_n, delta=delta_mat)
+    _draw_matrix(ax_pre, pre_mat, "2014–2022", pre_n, delta=None)
+    _draw_matrix(ax_post, post_mat, "2022–2025", post_n, delta=delta_mat)
 
     fig.suptitle(
-        "Token-weighted share of the closed first/second-person quartet, pre vs wartime",
-        fontsize=12.5, y=1.04,
-    )
-    fig.text(
-        0.5, -0.02,
-        "Roster authors only ($n = 33$). Wartime tiles annotate the period delta in percentage points (pp).",
-        ha="center", fontsize=8.5, color=COLOR_RULE, fontstyle="italic",
+        "First-person token shares within the closed quartet, 2014–2022 vs 2022–2025",
+        fontsize=12.5, y=1.06,
     )
 
     _save(fig, out_dir, "fig_narr_7_person_number_redistribution")
-    log.info("Wrote fig_narr_7_person_number_redistribution (clean 2x2, no callout)")
+    log.info("Wrote fig_narr_7_person_number_redistribution (1st-person 1x2 tiles)")
 
 
 # --- Figure 8: focused single-cell (1pl) author caterpillar ---------------
@@ -932,12 +1024,22 @@ def fig8_caterpillar_1pl_focused(authors: pd.DataFrame, out_dir: Path,
                                   highlight_bottom_n: int = 5) -> None:
     """Single-cell (1pl) author caterpillar designed to fit one page with a focal point.
 
-    Replaces the 5-cell `fig_q2_author_random_slope_caterpillar_pooled_*` produced
-    by the modeling script. Authors are sorted by posterior mean total period-shift
-    on the 1pl cell; the top `highlight_top_n` and bottom `highlight_bottom_n` are
-    drawn with literary-palette colors and named in-figure labels, while the
-    middle band is greyed out as context. Designed to fit a single 0.95-width
-    LaTeX figure on one printed page.
+    Authors are sorted by posterior mean total period-shift on the 1pl cell; the
+    top ``highlight_top_n`` and bottom ``highlight_bottom_n`` are drawn with
+    literary-palette colours and named in-figure labels, while the middle band is
+    greyed out as context. Designed to fit a single 0.95-width LaTeX figure.
+
+    Intervals are **50% HDIs** (the inner half of each posterior), not 95%:
+    with few poems per author the 95% bands are wide and nearly all cross the
+    reference, which over-reads as "all null"; the 50% HDI keeps the figure
+    honest about location while being less visually blunt. The 50% bounds use the
+    sampled ``*_hdi50_*`` summary columns when present (produced by the Q2 stage),
+    otherwise they are derived from the canonical 95% HDI by the Gaussian factor
+    ``z_0.75 / z_0.975`` applied to each side. These posteriors are symmetric on
+    the log scale to within ~5%, so the derived and sampled 50% HDIs agree to
+    within ~0.03 (log), i.e. to plotting precision. The derived path is used so
+    the interval stays consistent with the canonical per-author means without a
+    model re-run (a fresh fit on current inputs would change the author set).
     """
     if authors.empty:
         log.warning("Skipping fig8: authors table empty.")
@@ -947,27 +1049,37 @@ def fig8_caterpillar_1pl_focused(authors: pd.DataFrame, out_dir: Path,
         log.warning("Skipping fig8: no rows for (stratum=%s, cell=1pl).", stratum)
         return
 
-    # Sort by total period-shift posterior mean (descending = strongest positive at top)
+    # Merge wartime covariates so colour = location and shape = mobilization.
+    cov_path = ROOT / "data" / "author_covariates_paper_roster_n33.csv"
+    _sit = pd.read_csv(cov_path, dtype=str, keep_default_na=False).set_index("author")
+    d = d.merge(_sit[["mobilized", "in_ukraine_wartime", "region_at_archive_freeze"]].reset_index(),
+                on="author", how="left")
+
+    # Sort by total period-shift posterior mean (ascending = strongest positive at top)
     d = d.sort_values("author_total_period_shift_mean_log_mu", ascending=True).reset_index(drop=True)
     n = len(d)
 
-    # Define highlight masks
+    # Top/bottom authors still get an in-line rate-ratio label for readability.
     top_idx = set(range(n - highlight_top_n, n))
     bot_idx = set(range(highlight_bottom_n))
-    hi_idx = top_idx | bot_idx
-
-    # Colors
-    COLOR_POS = "#1F4E5F"     # deep teal for positive shifts (top)
-    COLOR_NEG = "#9A1750"     # burgundy for negative shifts (bottom)
-    COLOR_MID = "#C8C2B6"     # warm muted grey for unhighlighted middle
 
     fig_h = max(7.5, 0.20 * n + 2.2)
     fig, ax = plt.subplots(figsize=(9.0, fig_h))
     ax.set_facecolor("white")
 
     x_mean = d["author_total_period_shift_mean_log_mu"].to_numpy(float)
-    x_lo = d["author_total_period_shift_hdi95_low"].to_numpy(float)
-    x_hi = d["author_total_period_shift_hdi95_high"].to_numpy(float)
+    # 50% credible interval: prefer sampled hdi50 columns, else derive from the
+    # (verified symmetric) 95% HDI. Factor = z_0.75 / z_0.975 = 0.6745 / 1.9600.
+    if {"author_total_period_shift_hdi50_low",
+        "author_total_period_shift_hdi50_high"}.issubset(d.columns):
+        x_lo = d["author_total_period_shift_hdi50_low"].to_numpy(float)
+        x_hi = d["author_total_period_shift_hdi50_high"].to_numpy(float)
+    else:
+        lo95 = d["author_total_period_shift_hdi95_low"].to_numpy(float)
+        hi95 = d["author_total_period_shift_hdi95_high"].to_numpy(float)
+        f = 0.6744898 / 1.9599640
+        x_lo = x_mean - f * (x_mean - lo95)
+        x_hi = x_mean + f * (hi95 - x_mean)
     y = np.arange(n)
 
     # Reference lines
@@ -980,52 +1092,40 @@ def fig8_caterpillar_1pl_focused(authors: pd.DataFrame, out_dir: Path,
             color="#5A5A5A", fontsize=8.5, fontstyle="italic",
             va="center", ha="left")
 
-    # Background middle: greyed
-    middle = [i for i in range(n) if i not in hi_idx]
-    if middle:
-        m_arr = np.array(middle)
-        ax.hlines(m_arr, x_lo[m_arr], x_hi[m_arr],
-                  color=COLOR_MID, linewidth=1.4, alpha=0.7, zorder=1)
-        ax.plot(x_mean[m_arr], m_arr, "o",
-                color=COLOR_MID, markersize=3.4, alpha=0.85, zorder=2,
-                markeredgecolor="white", markeredgewidth=0.4)
+    # One 50% interval + posterior-mean dot per author.
+    # Extremes (top/bottom) get a slightly heavier stroke for emphasis.
+    for i, row in d.iterrows():
+        c = location_color(row.get("mobilized"), row.get("in_ukraine_wartime"),
+                           row.get("region_at_archive_freeze"))
+        mk = mobilization_marker(row.get("mobilized"))
+        emph = (i in top_idx) or (i in bot_idx)
+        ax.hlines(i, x_lo[i], x_hi[i], color=c,
+                  linewidth=2.0 if emph else 1.4,
+                  alpha=0.95 if emph else 0.6, zorder=3 if emph else 1)
+        ax.plot(x_mean[i], i, mk, color=c,
+                markersize=(5.8 if mk == "^" else 5.2) if emph else (3.6 if mk == "^" else 3.2),
+                alpha=1.0 if emph else 0.85, zorder=4 if emph else 2,
+                markeredgecolor="white", markeredgewidth=0.6)
 
-    # Top (positive)
-    if top_idx:
-        t_arr = np.array(sorted(top_idx))
-        ax.hlines(t_arr, x_lo[t_arr], x_hi[t_arr],
-                  color=COLOR_POS, linewidth=2.0, alpha=0.95, zorder=3)
-        ax.plot(x_mean[t_arr], t_arr, "o",
-                color=COLOR_POS, markersize=5.6, zorder=4,
-                markeredgecolor="white", markeredgewidth=0.7)
-
-    # Bottom (negative)
-    if bot_idx:
-        b_arr = np.array(sorted(bot_idx))
-        ax.hlines(b_arr, x_lo[b_arr], x_hi[b_arr],
-                  color=COLOR_NEG, linewidth=2.0, alpha=0.95, zorder=3)
-        ax.plot(x_mean[b_arr], b_arr, "o",
-                color=COLOR_NEG, markersize=5.6, zorder=4,
-                markeredgecolor="white", markeredgewidth=0.7)
-
-    # Author labels — show all author names on the y-axis
+    # Author labels — all names on the y-axis, coloured by location; extremes
+    # also carry their posterior-mean rate ratio.
     ax.set_yticks(y)
     labels = []
     label_colors = []
     for i, row in d.iterrows():
         rr = float(row["author_total_period_shift_rate_ratio_mean"])
-        if i in top_idx:
-            labels.append(f"{row['author']}   (RR={rr:.2f})")
-            label_colors.append(COLOR_POS)
-        elif i in bot_idx:
-            labels.append(f"{row['author']}   (RR={rr:.2f})")
-            label_colors.append(COLOR_NEG)
+        if i in top_idx or i in bot_idx:
+            labels.append(f"{_disp(row['author'])}   (RR={rr:.2f})")
         else:
-            labels.append(row["author"])
-            label_colors.append("#666666")
-    ax.set_yticklabels(labels, fontsize=8.5)
+            labels.append(_disp(row["author"]))
+        label_colors.append(location_color(row.get("mobilized"), row.get("in_ukraine_wartime"),
+                                           row.get("region_at_archive_freeze")))
+    ax.set_yticklabels(labels, fontsize=8.3)
     for tick_label, c in zip(ax.get_yticklabels(), label_colors):
         tick_label.set_color(c)
+    for tick_label, (_, row) in zip(ax.get_yticklabels(), d.iterrows()):
+        if is_mobilized(row.get("mobilized")):
+            tick_label.set_fontweight("semibold")
     ax.tick_params(left=False)
 
     # Layout
@@ -1047,30 +1147,48 @@ def fig8_caterpillar_1pl_focused(authors: pd.DataFrame, out_dir: Path,
     sec.set_xlabel("Rate ratio (post / pre)", fontsize=10)
     sec.tick_params(axis="x", labelsize=9)
 
-    # Title and legend
+    # Title and situation legend (only categories present in the roster)
     ax.set_title(
-        "Per-author 1pl period-shift posterior, pooled Ukrainian + Russian stratum",
+        "Per-author 1pl period-shift posterior, coloured by wartime location",
         fontsize=12, pad=20,
     )
 
-    handles = [
-        Line2D([], [], marker="o", color=COLOR_POS, linewidth=2,
-               label=f"top-{highlight_top_n} positive shifts", markersize=7),
-        Line2D([], [], marker="o", color=COLOR_NEG, linewidth=2,
-               label=f"bottom-{highlight_bottom_n} negative shifts", markersize=7),
-        Line2D([], [], marker="o", color=COLOR_MID, linewidth=1.4,
-               label="middle band (context)", markersize=5, alpha=0.7),
-    ]
-    ax.legend(handles=handles, loc="lower right",
-              fontsize=9, framealpha=0.95, edgecolor="#B0A78F")
+    ax.legend(handles=location_legend_handles(include_mobilization=True),
+              loc="lower right", fontsize=8.3, framealpha=0.95,
+              edgecolor="#B0A78F", title="colour = location; shape = mobilization",
+              title_fontsize=8.3)
 
-    fig.text(
-        0.5, -0.005,
-        f"N = {n} roster authors with poems in both periods. "
-        "Thick segments are 95\\% highest-density intervals; thin vertical at zero, dashed at population mean.",
-        ha="center", fontsize=8.5, color=COLOR_RULE, fontstyle="italic",
-    )
-    fig.tight_layout(rect=[0.0, 0.015, 1.0, 1.0])
+    # Inset: the dispersion of author posterior means is the RQ2 finding.
+    # Its SD coincides with the model random-slope SD sigma_delta reported in 4.2.2.
+    sd_emp = float(np.std(
+        d["author_period_shift_deviation_mean_log_mu"].to_numpy(float), ddof=1))
+    axin = ax.inset_axes([0.045, 0.70, 0.32, 0.25])
+    axin.hist(x_mean, bins=12, color="#6E7B8B", alpha=0.85,
+              edgecolor="white", linewidth=0.4)
+    axin.axvline(0.0, color="#444444", lw=0.8)
+    axin.axvline(pop_mean, color="#7A7A7A", ls="--", lw=0.8)
+    axin.set_title(
+        f"spread of author shifts\n$\\sigma_\\delta \\approx {sd_emp:.2f}$ (log scale)",
+        fontsize=7.4)
+    axin.tick_params(labelsize=6.3)
+    axin.set_yticks([])
+    for sp in ("top", "right", "left"):
+        axin.spines[sp].set_visible(False)
+
+    if _ANON is None:
+        fig.text(
+            0.5, -0.01,
+            f"N = {n} roster authors with poems in both periods. Coloured segments are "
+            "50\\% HDIs (the inner half of each posterior); thin vertical at zero, dashed at "
+            "the population mean. The narrower 50\\% HDI is shown in place of the 95\\%, which "
+            "is very wide with few poems per author; the heterogeneity evidence is the "
+            "across-author dispersion ($\\sigma_\\delta$, inset) and the biographical sorting "
+            "of the extremes, not per-author significance.",
+            ha="center", fontsize=8.0, color=COLOR_RULE, fontstyle="italic",
+        )
+        fig.tight_layout(rect=[0.0, 0.02, 1.0, 1.0])
+    else:
+        fig.tight_layout()
 
     _save(fig, out_dir, "fig_narr_8_caterpillar_1pl_focused")
     log.info("Wrote fig_narr_8_caterpillar_1pl_focused (n=%d)", n)
@@ -1139,6 +1257,17 @@ def main() -> None:
     parser.add_argument("--authors", type=Path, default=DEFAULT_AUTHORS)
     parser.add_argument("--roster", type=Path, default=DEFAULT_ROSTER)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--anonymize", action="store_true",
+        help="Replace poet names with stable <situation>_NN codes and strip "
+             "identifying bios; regenerate only the identity-revealing figures "
+             "(fig2, fig5, fig8) with an _anon suffix.",
+    )
+    parser.add_argument(
+        "--key-out", type=Path, default=None,
+        help="Where to write the private de-anonymization key CSV "
+             "(default: <output>/anonymization_key_PRIVATE.csv).",
+    )
     args = parser.parse_args()
 
     _setup_style()
@@ -1146,6 +1275,26 @@ def main() -> None:
         args.poem_cell.resolve(), args.roster.resolve(), args.authors.resolve()
     )
     out_dir = args.output.resolve()
+
+    if args.anonymize:
+        global _ANON, _GENERIC_TAGLINE, _STEM_SUFFIX
+        roster_csv = ROOT / "data" / "author_covariates_paper_roster_n33.csv"
+        _ANON, _GENERIC_TAGLINE, key = build_anonymization(roster_csv)
+        _STEM_SUFFIX = "_anon"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        # Default the key to a gitignored private dir, never inside the
+        # professor-facing output folder.
+        key_path = (args.key_out.resolve() if args.key_out
+                    else ROOT / "private_keys" / "poet_anonymization_key.csv")
+        key_path.parent.mkdir(parents=True, exist_ok=True)
+        key.to_csv(key_path, index=False)
+        log.warning("ANONYMIZED run. De-anonymization key (DO NOT SHARE): %s", key_path)
+        # Only the three figures that reveal poet identity need an anonymized variant.
+        fig2_author_trajectories(df, roster, cov, out_dir)
+        fig5_case_study_poets(df, out_dir)
+        fig8_caterpillar_1pl_focused(authors, out_dir)
+        log.info("Done. Anonymized figures in %s", out_dir)
+        return
 
     fig1_time_series_we_rises(df, out_dir)
     fig2_author_trajectories(df, roster, cov, out_dir)

@@ -47,12 +47,12 @@ from utils.pronoun_encoding import (
     POEM_COUNT_CELL_COLUMNS,
     poem_person_cell_column,
 )
-from utils.workspace import prepare_analysis_environment
+from utils.workspace import canonical_pronoun_annotation_csv, prepare_analysis_environment
 
 ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
 log = logging.getLogger(__name__)
 
-DEFAULT_INPUT = ROOT / "data" / "Annotated_GPT_rerun" / "pronoun_annotation.csv"
+DEFAULT_INPUT = canonical_pronoun_annotation_csv(ROOT)
 DEFAULT_OUTPUT = ROOT / "outputs" / "02_modeling_pronoun_sentiment"
 DEFAULT_MODEL_NAME = "cardiffnlp/twitter-xlm-roberta-base-sentiment"
 
@@ -74,7 +74,7 @@ def _load_pipeline(model_name: str, device: int):
         model=model,
         tokenizer=tokenizer,
         device=device,
-        return_all_scores=True,
+        top_k=None,  # transformers >=5 dropped return_all_scores; top_k=None returns all classes
         truncation=True,
         max_length=192,
     )

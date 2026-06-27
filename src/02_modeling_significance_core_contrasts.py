@@ -54,13 +54,13 @@ from utils.r_glmm_runner import (
     fit_glmer_binomial,
 )
 from utils.stats_common import bh_adjust, mode_with_tie_order, normalize_bool_flag, period_three_way
-from utils.workspace import prepare_analysis_environment
+from utils.workspace import canonical_pronoun_annotation_csv, prepare_analysis_environment
 
 log = logging.getLogger(__name__)
 
 ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
 
-DEFAULT_INPUT = ROOT / "data" / "Annotated_GPT_rerun" / "pronoun_annotation.csv"
+DEFAULT_INPUT = canonical_pronoun_annotation_csv(ROOT)
 DEFAULT_LAYER0 = ROOT / "data" / "To_run" / "00_filtering" / "layer0_poems_one_per_row.csv"
 DEFAULT_OUTPUT = ROOT / "outputs" / "02_modeling_significance_core_contrasts"
 DEFAULT_ROSTER = ROOT / "outputs" / "03_reporting_roster_freeze" / "roster_v1_frozen.csv"

@@ -9,12 +9,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from utils.workspace import prepare_analysis_environment
+from utils.workspace import canonical_pronoun_annotation_csv, prepare_analysis_environment
 
 ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
 
 DEFAULT_PER_POEM = ROOT / "outputs" / "03_reporting_descriptive_statistics" / "C_poem_perspective_derived_per_poem.csv"
-DEFAULT_PRONOUN = ROOT / "data" / "Annotated_GPT_rerun" / "pronoun_annotation.csv"
+DEFAULT_PRONOUN = canonical_pronoun_annotation_csv(ROOT)
 DEFAULT_LAYER0 = ROOT / "data" / "To_run" / "00_filtering" / "layer0_poems_one_per_row.csv"
 DEFAULT_OUT = ROOT / "outputs" / "03_reporting_roster_freeze"
 

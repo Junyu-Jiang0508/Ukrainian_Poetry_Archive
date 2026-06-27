@@ -14,11 +14,11 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 from utils.adaptive_temporal_binning import balanced_temporal_binning
 from utils.pronoun_encoding import pronoun_class_sixway_column
 from utils.stats_common import bh_adjust, mode_with_tie_order, normalize_bool_flag, period_pre_post_2022
-from utils.workspace import prepare_analysis_environment
+from utils.workspace import canonical_pronoun_annotation_csv, prepare_analysis_environment
 
 ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
 
-DEFAULT_INPUT = ROOT / "data" / "Annotated_GPT_rerun" / "pronoun_annotation.csv"
+DEFAULT_INPUT = canonical_pronoun_annotation_csv(ROOT)
 DEFAULT_LAYER0 = ROOT / "data" / "To_run" / "00_filtering" / "layer0_poems_one_per_row.csv"
 DEFAULT_OUTPUT = ROOT / "outputs" / "02_modeling_significance_models"
 

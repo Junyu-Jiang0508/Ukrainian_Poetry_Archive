@@ -30,13 +30,13 @@ from utils.finite_verb_exposure import resolve_finite_verb_counts_for_modeling
 from utils.poem_cell_counts import build_poem_cell_table_with_exposure
 from utils.pronoun_encoding import PRIMARY_GLM_CELLS_BAYESIAN, pronoun_class_sixway_column
 from utils.stats_common import bh_adjust, normalize_bool_flag, period_three_way
-from utils.workspace import prepare_analysis_environment
+from utils.workspace import canonical_pronoun_annotation_csv, prepare_analysis_environment
 
 ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
 
 log = logging.getLogger(__name__)
 
-DEFAULT_INPUT = ROOT / "data" / "Annotated_GPT_rerun" / "pronoun_annotation.csv"
+DEFAULT_INPUT = canonical_pronoun_annotation_csv(ROOT)
 DEFAULT_LAYER0 = ROOT / "data" / "To_run" / "00_filtering" / "layer0_poems_one_per_row.csv"
 DEFAULT_ROSTER = ROOT / "outputs" / "03_reporting_roster_freeze" / "roster_v1_frozen.csv"
 DEFAULT_OUTPUT = ROOT / "outputs" / "02_modeling_q2_hierarchical"
@@ -313,11 +313,15 @@ def fit_hierarchical_per_cell(
             dev_mean = float(np.mean(dev_samples))
             dev_low = float(np.quantile(dev_samples, 0.025))
             dev_high = float(np.quantile(dev_samples, 0.975))
+            dev_low50 = float(np.quantile(dev_samples, 0.25))
+            dev_high50 = float(np.quantile(dev_samples, 0.75))
             dev_p_gt0 = float(np.mean(dev_samples > 0.0))
             dev_false_sign_risk = float(min(dev_p_gt0, 1.0 - dev_p_gt0))
             total_mean = float(np.mean(total_samples))
             total_low = float(np.quantile(total_samples, 0.025))
             total_high = float(np.quantile(total_samples, 0.975))
+            total_low50 = float(np.quantile(total_samples, 0.25))
+            total_high50 = float(np.quantile(total_samples, 0.75))
             total_p_gt0 = float(np.mean(total_samples > 0.0))
             total_false_sign_risk = float(min(total_p_gt0, 1.0 - total_p_gt0))
             author_rows.append(
@@ -328,16 +332,22 @@ def fit_hierarchical_per_cell(
                     "author_period_shift_deviation_mean_log_mu": dev_mean,
                     "author_period_shift_deviation_hdi95_low": dev_low,
                     "author_period_shift_deviation_hdi95_high": dev_high,
+                    "author_period_shift_deviation_hdi50_low": dev_low50,
+                    "author_period_shift_deviation_hdi50_high": dev_high50,
                     "author_period_shift_deviation_p_direction_gt0": dev_p_gt0,
                     "author_period_shift_deviation_false_sign_risk": dev_false_sign_risk,
                     "author_total_period_shift_mean_log_mu": total_mean,
                     "author_total_period_shift_hdi95_low": total_low,
                     "author_total_period_shift_hdi95_high": total_high,
+                    "author_total_period_shift_hdi50_low": total_low50,
+                    "author_total_period_shift_hdi50_high": total_high50,
                     "author_total_period_shift_p_direction_gt0": total_p_gt0,
                     "author_total_period_shift_false_sign_risk": total_false_sign_risk,
                     "author_total_period_shift_rate_ratio_mean": float(np.exp(total_mean)),
                     "author_total_period_shift_rate_ratio_hdi95_low": float(np.exp(total_low)),
                     "author_total_period_shift_rate_ratio_hdi95_high": float(np.exp(total_high)),
+                    "author_total_period_shift_rate_ratio_hdi50_low": float(np.exp(total_low50)),
+                    "author_total_period_shift_rate_ratio_hdi50_high": float(np.exp(total_high50)),
                     "exposure_type": exposure_type,
                 }
             )

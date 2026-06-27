@@ -13,11 +13,11 @@ import statsmodels.formula.api as smf
 
 from utils.pronoun_encoding import pronoun_class_sixway_column
 from utils.stats_common import normalize_bool_flag, period_three_way
-from utils.workspace import prepare_analysis_environment
+from utils.workspace import canonical_pronoun_annotation_csv, prepare_analysis_environment
 
 ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
 
-DEFAULT_INPUT = ROOT / "data" / "Annotated_GPT_rerun" / "pronoun_annotation.csv"
+DEFAULT_INPUT = canonical_pronoun_annotation_csv(ROOT)
 DEFAULT_LAYER0 = ROOT / "data" / "To_run" / "00_filtering" / "layer0_poems_one_per_row.csv"
 DEFAULT_ROSTER = ROOT / "outputs" / "03_reporting_roster_freeze" / "roster_v1_frozen.csv"
 DEFAULT_OUT = ROOT / "outputs" / "02_modeling_typology_and_period_models"

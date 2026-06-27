@@ -24,6 +24,8 @@ PYTHONPATH=src python src/00_pipeline_orchestrator.py --from-stage 02a --to-stag
 | 01c | `src/01_annotation_rule_annotate_pronouns.py`        | Rule-based pilot annotation                       | annotated pilot CSV |
 | 01d | `src/01_annotation_gpt_annotation.py`                | Stanza-level GPT annotation engine                | `data/Annotated_GPT/pronoun_annotation.csv` (+ `*_raw.jsonl`) |
 | 01e | `src/01_annotation_gpt_annotate_full.py`             | Wrapper running 01d with `--source public`        | same artifacts under public-source dir |
+| 01g | `src/01_annotation_source_pronoun_detection.py`     | **Canonical** full v2 depparse detection (no GPT) | `data/Annotated_Source/tokens_v2_full.csv` |
+| 01h | `src/01_annotation_export_gpt_compatible.py`        | Map v2 tokens → downstream schema                 | `data/Annotated_Source/pronoun_annotation_v2.csv` |
 | 02a | `src/02_modeling_significance_core_contrasts.py`     | Two-period confirmatory contrasts + sensitivity   | core contrast tables |
 | 02b | `src/02_modeling_q1_per_cell_glm.py`                 | **RQ1**: per-cell one-vs-rest GLM (poem & stanza) | `outputs/02_modeling_q1_per_cell_glm/q1_*.csv` |
 | 02c | `src/02_modeling_q2_hierarchical.py`                 | **RQ2**: hierarchical random-slope by author      | `outputs/02_modeling_q2_hierarchical/q2_*.csv` |
@@ -35,15 +37,20 @@ PYTHONPATH=src python src/00_pipeline_orchestrator.py --from-stage 02a --to-stag
 
 ## Data Inputs (canonical)
 
-All `02*` modeling stages and the `03*` reporting stages read the curated
-GPT annotation table:
+All `02*` modeling stages and the `03*` reporting stages read the canonical
+source-side annotation table (resolved via
+`utils.workspace.canonical_pronoun_annotation_csv`):
 
 ```
-data/Annotated_GPT_rerun/pronoun_annotation.csv
+data/Annotated_Source/pronoun_annotation_v2.csv
 ```
 
-This is the curated re-run of `data/Annotated_GPT/pronoun_annotation.csv`
-(produced by stage 01d). Override with `--input` on any stage if needed.
+This is produced by stages **01g** (`01_annotation_source_pronoun_detection.py
+--full --mode v2`, depparse detection from the Ukrainian/Russian source text — no
+GPT translation) and **01h** (`01_annotation_export_gpt_compatible.py`, schema map).
+It supersedes the GPT table `data/Annotated_GPT_rerun/pronoun_annotation.csv`
+(stages 01d/01e, retained for provenance). Override per-run with `--input` on any
+stage or with the `PRONOUN_ANNOTATION_CSV` environment variable.
 
 ## Recommended Reproducible Runs
 

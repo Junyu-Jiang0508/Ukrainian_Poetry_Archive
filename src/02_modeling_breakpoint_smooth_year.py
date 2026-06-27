@@ -46,12 +46,12 @@ from utils.language_strata import (
 from utils.poem_cell_counts import build_poem_cell_table_with_exposure
 from utils.pronoun_encoding import PRIMARY_GLM_CELLS
 from utils.stats_common import normalize_bool_flag
-from utils.workspace import prepare_analysis_environment
+from utils.workspace import canonical_pronoun_annotation_csv, prepare_analysis_environment
 
 ROOT = prepare_analysis_environment(__file__, matplotlib_backend="Agg")
 log = logging.getLogger(__name__)
 
-DEFAULT_INPUT = ROOT / "data" / "Annotated_GPT_rerun" / "pronoun_annotation.csv"
+DEFAULT_INPUT = canonical_pronoun_annotation_csv(ROOT)
 DEFAULT_LAYER0 = ROOT / "data" / "To_run" / "00_filtering" / "layer0_poems_one_per_row.csv"
 DEFAULT_OUTPUT = ROOT / "outputs" / "02_modeling_breakpoint_smooth_year"
 
@@ -77,7 +77,9 @@ def _fit_smooth_year_for_cell(
     sub = sub.loc[sub["exposure_n_tokens"].astype(float).gt(0)].copy()
     sub["k"] = sub[cell].astype(int)
     sub["log_exposure"] = np.log(sub["exposure_n_tokens"].astype(float))
-    sub["year_int"] = pd.to_numeric(sub["year"], errors="coerce")
+    if "year_int" not in sub.columns:
+        sub["year_int"] = pd.to_numeric(sub["year"], errors="coerce")
+    sub["year_int"] = pd.to_numeric(sub["year_int"], errors="coerce")
     sub = sub.dropna(subset=["year_int"]).copy()
     if sub.empty or int(sub["k"].sum()) == 0 or sub["year_int"].nunique() < df_spline + 1:
         return None
@@ -139,8 +141,9 @@ def _fit_smooth_year_for_cell(
 
 def _per_year_rates(poem_df: pd.DataFrame) -> pd.DataFrame:
     """Aggregate per-year corpus rate per cell, using token exposure as denominator."""
-    yr = pd.to_numeric(poem_df["year"], errors="coerce")
-    poem_df = poem_df.assign(year_int=yr)
+    # The poem-level table carries year_int (year is annotation-level only); accept either.
+    year_src = poem_df["year_int"] if "year_int" in poem_df.columns else poem_df["year"]
+    poem_df = poem_df.assign(year_int=pd.to_numeric(year_src, errors="coerce"))
     rows: list[dict[str, object]] = []
     for cell in PRIMARY_GLM_CELLS:
         sub = poem_df.dropna(subset=["year_int"]).copy()
@@ -266,6 +269,8 @@ def load_and_build_poem_table(
     df = pd.read_csv(annot_path, low_memory=False, on_bad_lines="skip")
     df["poem_id"] = df["poem_id"].astype(str).str.strip()
     df["language_clean"] = df["language"].fillna("").astype(str).str.strip()
+    # build_poem_cell_table_with_exposure aggregates year_int; derive it from year.
+    df["year_int"] = pd.to_numeric(df["year"], errors="coerce").astype("Int64")
     if "is_repeat" in df.columns and "is_translation" in df.columns:
         df["is_repeat"] = normalize_bool_flag(df["is_repeat"])
         df["is_translation"] = normalize_bool_flag(df["is_translation"])

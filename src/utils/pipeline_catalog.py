@@ -48,6 +48,25 @@ def build_pipeline_catalog() -> list[PipelineStage]:
             (),
             (),
         ),
+        (
+            "01g",
+            src / "01_annotation_source_pronoun_detection.py",
+            "Source-side v2 detection (full)",
+            "Full-corpus depparse pronoun detection (Ukrainian/Russian source text, no GPT "
+            "translation) → data/Annotated_Source/tokens_v2_full.csv. CANONICAL annotation "
+            "entry point; supersedes the GPT stages 01d/01e.",
+            ("--full", "--mode", "v2", "--input", "data/Annotated_GPT_rerun/pronoun_annotation.csv"),
+            (),
+        ),
+        (
+            "01h",
+            src / "01_annotation_export_gpt_compatible.py",
+            "v2 → GPT-compatible export",
+            "Map v2 tokens to the downstream schema → data/Annotated_Source/pronoun_annotation_v2.csv "
+            "(the canonical_pronoun_annotation_csv target).",
+            (),
+            ("01g",),
+        ),
         # --- Core analyses (frequentist, 4-cell unless flagged Bayesian) ---
         (
             "02a",
