@@ -1,255 +1,75 @@
-# The Grammar of Belonging
+# "Someday we'll become a people:" The Poetic Plural in Wartime Ukraine
 
-**Computational Analysis of Pronominal Deixis in Wartime Ukrainian Poetry (2014--2025)**
+Computational analysis of pronoun use in Ukrainian poetry posted to Facebook, 2014–2025.
 
-Junyu Jiang | Capstone Advisor: Prof. Amelia Glaser  
-Contemporary Ukrainian Poetry Archive
+**Junyu Jiang** · Advisor: **Prof. Amelia Glaser** (UC San Diego)
 
 ---
 
 ## Overview
 
-This project applies computational methods from corpus linguistics and NLP to analyze how Ukrainian poets deploy pronominal strategies---the deliberate use of *we*, *you*, *they*---to construct collective identity during wartime. By tracking shifts in pronoun usage across the Contemporary Ukrainian Poetry Archive (2014--2025), the analysis reveals how the boundaries of *Self* and *Other* are continuously renegotiated in response to the ongoing conflict.
+We test whether Ukrainian poets shifted from the first-person singular ("I") to
+the plural ("we") after Russia's full-scale invasion in February 2022. Rather than
+comparing different poets, we compare each poet to their own earlier work
+(within-author design). The headline finding: there is **no shift at the corpus
+level**, but a clear one **among poets who remained in Ukraine** — and the wartime
+"we" splits into an *exhortational* "we" (poets further from the front) and a
+*testimonial* "we" (poets inside the fighting).
 
-## Research Questions
+## Data
 
-| # | Question | Stage |
-|---|----------|-------|
-| **RQ1 (primary)** | How is pronominal attention reallocated within the closed first/second-person quartet `{1sg, 1pl, 2sg, 2pl_vy_true_plural}` across the 2022 cutpoint? | `02a` closed-denominator binomial logit with **co-primary inference**: lme4 GLMM with random author intercept and R `survival::clogit` conditional logit; legacy `+C(author)` MLE retained as sensitivity only |
-| **RQ1b** | Which authors drive the attention shift, and is it robust? | `02bq1b` author×period FE (HC1 + strict per-cell filter) and per-author δ bootstrap forests; `02a` leave-one-author-out sensitivity |
-| **RQ1c** | Did the same peace-time poets change, or did war recruit new entrants? | `02bq1c` GLM restricted to authors with first observed year ≤ 2014 (exploratory; not in main BH family) |
-| **RQ2 (secondary)** | Does the attention reallocation track an *absolute* shift in any individual cell, or only a redistribution? | `02b` per-cell Poisson / NB GLM with token offset (post-P0-3 primary); `02b2`/`02b3`/`02b4` (stanza / FV / FV-excl-imperative sensitivities); `00e` precomputes FV counts; `02bcmp` + `02bsc` summarize robustness |
-| **RQ3** | How is the shift distributed across individual authors? | `02c` hierarchical random-slope (`02_modeling_q2_hierarchical.py`) |
-| **RQ4** | Are typology- and period-based contrasts robust at corpus and cohort level? | `02d/02f` (significance + typology models) |
+- Source: Contemporary Ukrainian Poetry Archive (Glaser, 2024)
+- After filtering: **1,601 poems by 105 authors** (2014–2025)
+- Modeled roster: **33 authors** with ≥5 poems on each side of the 2022 cutpoint
+- Canonical input: `data/Annotated_GPT_rerun/pronoun_annotation.csv`
 
-**Estimand decoupling between `02a` (Attention Allocation, primary) and `02b` (Absolute Salience, secondary).**
-The two confirmatory stages target *different* estimands and must not be conflated in
-the manuscript narrative:
+## Method
 
-- **`02a` — Attention Allocation (primary).** Closed-denominator binomial logit on the
-  four-cell first/second-person quartet
-  `{1sg, 1pl, 2sg, 2pl_vy_true_plural}` with `n_12 = sum(four-cell)` as the
-  trial total. Estimand: *"Within the closed first/second-person sub-space, how
-  is attention reallocated between self (`1sg`) and group (`1pl`), and between
-  intimate (`2sg`) and collective (`2pl`)?"* The closed denominator is a
-  feature, not a bug: it is the natural sample space for a pragmatic
-  attention-allocation question, and reviewers reading
-  van Dijk (2011) / Wilson (1990) / Chilton (2004) will read pronoun choice as
-  positional rather than absolute. Empirically this is also where the signal
-  in the corpus actually lives (see `outputs/02_modeling_significance_core_contrasts/`).
-- **`02b` — Absolute Salience (secondary).** Per-cell Poisson / NB GLM with offset
-  `log(exposure_n_tokens)` (primary, post-P0-3) and stanza / finite-verb sensitivities.
-  Estimand: *"Do poets write absolutely more 1pl (or 2sg, 2pl, 1sg) tokens, controlling
-  for exposure?"* Cells are inferentially independent and the denominator is exposure,
-  not other pronouns. In the present corpus this estimand is null across cells and
-  strata at α = 0.05 (BH-FDR); it serves as the discipline-mandated absolute-rate check
-  on the primary attention-allocation finding.
+1. **Pronoun recovery.** Ukrainian and Russian are null-subject languages, so most
+   subjects are implied. We use the [Stanza](https://stanfordnlp.github.io/stanza/)
+   pipeline to recover dropped subjects and tag each as 1sg / 1pl / 2sg / 2pl.
+2. **Modeling.** Per-cell within-author GLMs (Poisson + negative-binomial, token
+   offset) for absolute rate, and a hierarchical NB model with author random slopes
+   for individual trajectories.
+3. **Collocations.** Dependency-parsed period-differential collocates reveal *what
+   the "we" governs* — notably the deontic verb мусити ("must"), absent before 2022.
+4. **Temporal check.** Adaptive binning + PELT change-point detection around 2022.
 
-Manuscript ordering: report `02a` attention allocation first; then turn to `02b`
-to demonstrate that the redistribution is *not* driven by an absolute rate shift
-in any individual cell — i.e., poets are reweighting how they distribute pronominal
-deixis within the first/second-person sub-space rather than producing absolutely
-more first- or second-person tokens per unit of text. `02a` is fit as a
-*co-primary* combination of (i) a binomial GLMM with random author intercept
-(`lme4::glmer`, via `src/utils/r_glmm_runner.py`) and (ii) a Chamberlain
-conditional logit (`R survival::clogit` via `src/utils/r_clogit_runner.py`,
-post-P0-2 fix), both of which avoid the incidental-parameter bias that the
-unconditional `+ C(author)` MLE incurs at our sample size (N ≈ 33 authors).
-
-**Cell-set split between frequentist and Bayesian paths.** The 5-cell split
-(`{1sg, 1pl, 2sg, 2pl_vy_polite_singular, 2pl_vy_true_plural}`) is collapsed to a
-4-cell `PRIMARY_GLM_CELLS_FREQUENTIST` set `{1sg, 1pl, 2sg, 2pl_vy_true_plural}`
-for all frequentist stages (Q1, Q1b, Q1c, robustness). Polite-singular ви has 23
-events / 18 poems / 13 authors with only 3 authors contributing events in both
-periods — too sparse for MLE-based poem-level inference (separation kills the
-fit). Q2 hierarchical retains the full 5-cell `PRIMARY_GLM_CELLS_BAYESIAN` set
-because negative-binomial random-slope shrinkage produces meaningful (if wide)
-HDIs even at this sparsity. The polite-singular column always remains in
-`q1_poem_unit_cell_counts_12.csv` for future stanza-level work.
-
-**Estimand note (`year` vs `Date posted`).** Primary period coding is composition-year
-based (`year` → `period_three_way`). The `invasion_20220224` robustness spec uses
-posting date (`Date posted`) and should be interpreted as an **alternate estimand**
-rather than a same-estimand robustness check.
-
-**Offset-selection note (post-P0-3).** The primary Q1 (`02b`) offset is `n_tokens`,
-matching the manuscript Methods. Stanza offset is retained as a sensitivity (`02b2`,
-`--exposure-type=n_stanzas`) because `exposure_n_stanzas == 1` for 74% of poems and is
-therefore constant — and uninformative — across most of the corpus. Finite-verb offsets
-(`02b3`, `02b4`) are also co-reported and folded into the specification-curve outputs
-(`02bsc`) to avoid denominator cherry-picking. The unsuffixed file
-`q1_poem_per_cell_glm_by_language.csv` now carries the token-offset (primary) estimates.
-
-All RQ scripts read the canonical stanza-level GPT annotation table:
-`data/Annotated_GPT_rerun/pronoun_annotation.csv`.
-
-## Pipeline
-
-The pipeline is driven by `src/00_pipeline_orchestrator.py` and the
-ordered stage catalog in `src/utils/pipeline_catalog.py`. Every stage has a
-short numeric ID and a single canonical script, plus optional explicit
-`depends_on` dependencies resolved by the orchestrator before execution. To
-inspect the live order:
-
-```bash
-PYTHONPATH=src python src/00_pipeline_orchestrator.py --list
-```
-
-| ID  | Script | Purpose |
-|-----|--------|---------|
-| 00a | `00_filtering.py`                            | Layer 0/1 split: posts → poems → stanzas |
-| 00b | `00_gpt_human_review_batch.py`               | GPT adjudication for uncertain split rows |
-| 00c | `00_public_list_filter.py`                   | Build public-list corpus + derivative CSVs |
-| 00d | `00_layer0_layer1_to_run_filter.py`          | In-place trim of `data/To_run/00_filtering/` to public-list rules |
-| 00e | `00e_compute_finite_verb_exposure.py`       | Precompute Stanza finite-verb counts per stanza → `stanza_finite_verb_counts.csv` |
-| 01a | `01_annotation_pronoun_detection.py`         | Morphological pronoun detection (spaCy) |
-| 01b | `01_annotation_toolkit.py`                   | Sampling / QA helpers |
-| 01c | `01_annotation_rule_annotate_pronouns.py`    | Heuristic pilot annotation |
-| 01d | `01_annotation_gpt_annotation.py`            | Stanza-level GPT annotation engine (async) |
-| 01e | `01_annotation_gpt_annotate_full.py`         | Wrapper that runs 01d with `--source public` |
-| 01f | `01_annotation_vy_register_audit.py`         | Manual QA package for `vy_register` (full polite-singular + stratified true-plural sample) |
-| 02a | `02_modeling_significance_core_contrasts.py` | **Attention Allocation**: closed-denominator binomial on the 1st/2nd-person 4-cell quartet; co-primary lme4 GLMM + Cox conditional logit (legacy `+C(author)` MLE retained as sensitivity only) |
-| 02b | `02_modeling_q1_per_cell_glm.py`             | **Absolute Salience (RQ1) — token offset, primary**: per-cell Poisson / NB GLM with `log(exposure_n_tokens)` offset; co-primary inference file includes Poisson+wild-bootstrap and NB |
-| 02b2 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_stanzas` | **RQ1 sensitivity**: same script, stanza offset (degenerate for 74 % of poems with single stanza, retained for continuity) |
-| 02b3 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_finite_verbs` | **RQ1 sensitivity**: finite-verb offset (requires `00e`) |
-| 02b4 | `02_modeling_q1_per_cell_glm.py --exposure-type=n_finite_verbs_excl_imperative` | **RQ1 sensitivity**: FV offset excluding imperatives |
-| 02bvl | `02_modeling_finite_verb_validation_sample.py` | Stratified Stanza validation tokens + morph vs depparse agreement |
-| 02bq1c | `02_modeling_q1c_pre_invasion_cohort.py`   | **RQ1c**: exploratory pre-invasion cohort GLM (not in main BH family) |
-| 02bq1b | `02_modeling_q1b_within_author_fe.py`      | **RQ1b**: parametric author×period FE (HC3) + per-author δ bootstrap |
-| 02bq3 | `02_modeling_q3_sparse_2pl_aggregated.py`   | Supplementary author×period legacy-2pl aggregation |
-| 02brat | `02_modeling_ratio_indices.py`              | Build shared poem-level ratio index table (FV-gated), exclusions, and sensitivity denominator variant |
-| 02bratpop | `02_modeling_ratio_q1_binomial.py`      | Ratio-population binomial GLM with clustered SE + co-primary bootstrap p outputs |
-| 02bratq1b | `02_modeling_ratio_q1b_within_author_fe.py` | Ratio within-author FE binomial + sparsity audits + author-level bootstrap deltas |
-| 02bratq2 | `02_modeling_ratio_q2_hierarchical.py`   | Ratio hierarchical logistic (Bambi), random-slope fallback, author caterpillars |
-| 02brobp | `02_modeling_robustness_period_definitions.py` | Q1 replicated under alternate period encodings |
-| 02broba | `02_modeling_robustness_author_filter.py` | Q1 replicated under min-poems-per-period thresholds |
-| 02bcmp | `02_modeling_robustness_offset_comparison.py` | Join Q1 offset GLM CSVs (long/wide + forest plots) |
-| 02bsc | `02_modeling_specification_curve.py`        | Build specification-curve tables/figure across Q1-family reasonable specs |
-| 02c | `02_modeling_q2_hierarchical.py`             | **RQ3 (author heterogeneity)**: hierarchical NB random-slope with posterior direction probability and q-direction summaries |
-| 02coll | `02_modeling_pronoun_collocations.py`     | **P1-A/B**: dependency-parsed collocations + period-differential log-likelihoods (Stanza UA/RU) |
-| 02drift | `02_modeling_pronoun_semantic_drift.py`  | **P1-C**: per-period FastText + Procrustes drift for ми/я/ти/ви |
-| 02sent | `02_modeling_pronoun_sentiment.py`        | **P1-D**: XLM-R stanza sentiment × dominant pronoun cell mixed model |
-| 02cooc | `02_modeling_pronoun_cooccurrence.py`     | **P1-E**: pronoun ego co-occurrence networks (GraphML + PNG) by cell × period |
-| 02topic | `02_modeling_topic_bertopic.py`          | **P1-F**: per-language BERTopic with multilingual MiniLM embeddings; covariate-ready poem-topic assignments |
-| 02brkpt | `02_modeling_breakpoint_smooth_year.py`  | **P2-2**: smooth-year B-spline GLM and PELT change-point bootstrap CI |
-| 02d | `02_modeling_significance_models.py`         | Model-based inference for pronoun shifts |
-| 02e | `02_modeling_significance_publication_figures.py` | Publication figures for inferential outputs |
-| 02f | `02_modeling_typology_and_period_models.py`  | Typology + period cohort models |
-| 03a | `03_reporting_descriptive_statistics.py`     | Methodology + corpus overview tables |
-| 03b | `03_reporting_roster_freeze.py`              | Author roster freeze + diagnostics |
-
-## Repository Structure
+## Repository
 
 ```
-Ukrainian-Poetry/
-├── README.md
-├── requirements.txt
-├── .gitignore
-│
-├── src/
-│   ├── 00_pipeline_orchestrator.py    # Unified runner (--list / --from-stage / --to-stage / --only)
-│   ├── 00_*.py                        # Filtering & corpus build (00a–00e)
-│   ├── 01_*.py                        # Annotation (01a–01e)
-│   ├── 02_*.py                        # Modeling (02a–02f)
-│   ├── 03_*.py                        # Reporting (03a, 03b)
-│   │
-│   └── utils/                         # Shared library code (importable as `utils.<module>`)
-│       ├── pipeline_catalog.py        # Source of truth for stage order
-│       ├── workspace.py               # Repo-root + matplotlib environment helpers
-│       ├── stage_io.py                # Stage-aware CSV reading/writing
-│       ├── adaptive_temporal_binning.py  # `adaptive_binning` + `balanced_temporal_binning`
-│       ├── annotation_cohort.py
-│       ├── annotation_derived_columns.py
-│       ├── csv_io.py
-│       ├── label_normalization.py
-│       ├── language_strata.py
-│       ├── pronoun_encoding.py
-│       ├── public_list_filters.py
-│       ├── repo_bootstrap.py          # `prepare_repo` for legacy stand-alone scripts
-│       ├── reporting_common.py
-│       ├── stats_common.py
-│       └── _archive/                  # IAA / manual-annotation scripts (see archive README)
-│
-├── app/                               # Cloud annotation app (Streamlit + Supabase)
-├── docs/                              # Workflow doc + reports
-├── data/                              # Gitignored — raw, processed, GPT runs, annotations
-└── outputs/                           # Gitignored — per-stage analysis artifacts
-```
-
-## Data Flow (Live Path)
-
-```
-data/raw/ukrpoetry_database.csv ─┬─► 00_filtering.py     ──► data/To_run/00_filtering/layer0,layer1
-                                 │
-                                 └─► 00_public_list_filter.py ──► data/processed/ukrpoetry_database_public_list.csv
-
-data/To_run/00_filtering/layer1_stanzas_one_per_row.csv
-        │
-        ├─► 00e_compute_finite_verb_exposure.py ──► data/To_run/00_filtering/stanza_finite_verb_counts.csv
-        │
-        ▼
-01_annotation_gpt_annotation.py (async, stanza-level)
-        │
-        ▼
-data/Annotated_GPT/pronoun_annotation.csv
-        │
-        ▼ (after manual rerun curation)
-data/Annotated_GPT_rerun/pronoun_annotation.csv  ◄── canonical input for all 02/03 stages
-        │
-        ├─► 02_modeling_significance_core_contrasts.py
-        ├─► 02_modeling_q1_per_cell_glm.py            (RQ1)
-        ├─► 02_modeling_q2_hierarchical.py            (RQ2)
-        ├─► 02_modeling_significance_models.py
-        ├─► 02_modeling_significance_publication_figures.py
-        ├─► 02_modeling_typology_and_period_models.py (RQ3 / typology)
-        └─► 03_reporting_*.py
+src/
+  00_*  Filtering & corpus build
+  01_*  Pronoun annotation (spaCy + GPT)
+  02_*  Modeling (GLM, hierarchical, collocations)
+  03_*  Reporting tables & figures
+  utils/  Shared library code
+data/     (gitignored) corpus, annotations
+outputs/  (gitignored) per-stage results
 ```
 
 ## Setup
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
 python -m spacy download uk_core_news_sm
-# Stanza Ukrainian models (for `00e` finite-verb precompute and `02bvl` validation)
 python -m stanza.download uk
 ```
 
-GPT annotation requires an OpenAI API key in `.env`:
+GPT annotation needs an OpenAI key in `.env`:
 
 ```
 OPENAI_API_KEY=sk-...
 ```
 
-## Running the Pipeline
+## Run
 
 ```bash
-# List every stage in execution order
+# List all stages in order
 PYTHONPATH=src python src/00_pipeline_orchestrator.py --list
 
-# Run a contiguous range
+# Run a range
 PYTHONPATH=src python src/00_pipeline_orchestrator.py --from-stage 02a --to-stage 03b
-
-# Run specific stages only
-PYTHONPATH=src python src/00_pipeline_orchestrator.py --only 02b 02c 03a
-
-# Dry-run (print commands only)
-PYTHONPATH=src python src/00_pipeline_orchestrator.py --from-stage 00a --to-stage 03b --dry-run
 ```
-
-Each stage script can also be invoked directly, e.g.
-`PYTHONPATH=src python src/02_modeling_q1_per_cell_glm.py`.
-
-## Method Notes
-
-- `exposure_n_stanzas == 0` rows are excluded from offset models by `include_in_offset_models`; retain audit outputs when reporting selection effects.
-- Q2 NB dispersion prior currently follows Bambi default family priorization (including HalfNormal-scale components for hierarchical terms); document this explicitly in methods write-up.
-- Frequentist BH in Q1 remains within-stratum; Q2 uses posterior-direction false-sign risk columns plus BH-style `q_direction` summaries for author-level ranking.
-
-## Key Dependencies
-
-- **NLP**: spaCy, Stanza (`stanza` package; install Ukrainian models for `00e` / FV offset), Transformers
-- **Statistics**: scipy, statsmodels, ruptures, scikit-learn
-- **Visualization**: matplotlib, seaborn
-- **Annotation**: OpenAI API (GPT-4o-mini), Streamlit (legacy IAA app in `src/utils/_archive/`)
