@@ -1,75 +1,47 @@
-# "Someday we'll become a people:" The Poetic Plural in Wartime Ukraine
+# Someday We'll Become a People: Pronoun Use in Ukrainian War Poetry (2014–2025)
 
-Computational analysis of pronoun use in Ukrainian poetry posted to Facebook, 2014–2025.
-
-**Junyu Jiang** · Advisor: **Prof. Amelia Glaser** (UC San Diego)
-
----
+Data and code for a within-author study of how first- and second-person pronoun use shifts in contemporary Ukrainian poetry across the 2022 full-scale invasion. This repository accompanies the article by Junyu Jiang and Amelia Glaser (U. C. San Diego) and reproduces every figure, table, and statistic reported in the paper.
 
 ## Overview
 
-We test whether Ukrainian poets shifted from the first-person singular ("I") to
-the plural ("we") after Russia's full-scale invasion in February 2022. Rather than
-comparing different poets, we compare each poet to their own earlier work
-(within-author design). The headline finding: there is **no shift at the corpus
-level**, but a clear one **among poets who remained in Ukraine** — and the wartime
-"we" splits into an *exhortational* "we" (poets further from the front) and a
-*testimonial* "we" (poets inside the fighting).
+We ask whether Ukrainian poets move from the singular **"I"** toward the collective **"we"** after the full-scale invasion. Working within a curated corpus of **1,601 poems posted to Facebook by 33 poets (2014–2025)**, we compare
+each poet to their own pre-war baseline rather than comparing poets to one another.
+
+The central result is that a **flat corpus-level average masks a sharp internal split**: the corpus as a whole shows no reliable shift, but the largest moves toward the plural **"we"** are concentrated among poets who **remained physically in Ukraine** after 2022, while poets who evacuated drift in the opposite direction. At the level of grammar, the wartime corpus also sees the deontic verb **мусити ("must")** emerge as a head governing the first-person plural — a "we who must" that is essentially absent before 2022.
+
+## Key findings
+
+- A within-author design across 33 poets yields **no reliable period shift at the corpus level** for any pronoun cell.
+- That null **masks biographical polarization**: collective "we" rises most among poets who stayed in Ukraine and falls among those who left, lining the two ends of the distribution up with poets' wartime locations.
+- **мусити ("must")** enters the first-person-plural cell from zero pre-war tokens to thirteen in wartime — the clearest single grammatical signal of a shift from lyric "I" to an obligated collective "we."
+
+## Repository structure
+
+> Paths below reflect the intended layout — adjust to match the actual files.
+
+```
+.
+├── data/
+│   ├── poems/                # Corpus of 1,601 poems (text + metadata)
+│   ├── biographical/         # Per-poet metadata (language, 2022 location, etc.)
+│   └── annotations/          # Pronoun-cell labels and validation sample
+├── src/
+│   ├── 01_preprocess.py      # Cleaning, stanza segmentation, language tagging
+│   ├── 02_detect_pronouns.py # Stanza dependency parse + pro-drop recovery
+│   ├── 03_models.R           # Poem-level negative-binomial / Bayesian models
+│   └── 04_collocations.py    # Dependency-parsed head-lemma collocation analysis
+├── figures/                  # Generated figures (caterpillar, drift, collocates)
+├── tables/                   # Generated tables (Table 1, etc.)
+└── README.md
+```
 
 ## Data
 
-- Source: Contemporary Ukrainian Poetry Archive (Glaser, 2024)
-- After filtering: **1,601 poems by 105 authors** (2014–2025)
-- Modeled roster: **33 authors** with ≥5 poems on each side of the 2022 cutpoint
-- Canonical input: `data/Annotated_GPT_rerun/pronoun_annotation.csv`
+The corpus is drawn from the **Contemporary Ukrainian Poetry Archive**, an ongoing catalogue of poems posted to Facebook. 
 
 ## Method
 
-1. **Pronoun recovery.** Ukrainian and Russian are null-subject languages, so most
-   subjects are implied. We use the [Stanza](https://stanfordnlp.github.io/stanza/)
-   pipeline to recover dropped subjects and tag each as 1sg / 1pl / 2sg / 2pl.
-2. **Modeling.** Per-cell within-author GLMs (Poisson + negative-binomial, token
-   offset) for absolute rate, and a hierarchical NB model with author random slopes
-   for individual trajectories.
-3. **Collocations.** Dependency-parsed period-differential collocates reveal *what
-   the "we" governs* — notably the deontic verb мусити ("must"), absent before 2022.
-4. **Temporal check.** Adaptive binning + PELT change-point detection around 2022.
-
-## Repository
-
-```
-src/
-  00_*  Filtering & corpus build
-  01_*  Pronoun annotation (spaCy + GPT)
-  02_*  Modeling (GLM, hierarchical, collocations)
-  03_*  Reporting tables & figures
-  utils/  Shared library code
-data/     (gitignored) corpus, annotations
-outputs/  (gitignored) per-stage results
-```
-
-## Setup
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python -m spacy download uk_core_news_sm
-python -m stanza.download uk
-```
-
-GPT annotation needs an OpenAI key in `.env`:
-
-```
-OPENAI_API_KEY=sk-...
-```
-
-## Run
-
-```bash
-# List all stages in order
-PYTHONPATH=src python src/00_pipeline_orchestrator.py --list
-
-# Run a range
-PYTHONPATH=src python src/00_pipeline_orchestrator.py --from-stage 02a --to-stage 03b
-```
+1. **Pronoun detection (stanza level).** Each stanza is dependency-parsed with **Stanza**; because Ukrainian and Russian are null-subject languages, impliedsubjects are recovered with an LLM-assisted pro-drop step before pronoun cells (1sg, 1pl, 2sg, 2pl) are counted.
+2. **Modeling (poem level).** Per-poem pronoun counts feed **poem-level negative-binomial / hierarchical Bayesian within-author models**, with poem token count as exposure and a period term for pre- vs. post-2022.
+3. **Robustness.** Results are checked across exposure definitions, period codings, two model families, and a specification curve before any effect is read as real.
+4. **Collocations.** A dependency-parsed, period-differential collocation analysis identifies which head verbs govern "we" before vs. during the war.
