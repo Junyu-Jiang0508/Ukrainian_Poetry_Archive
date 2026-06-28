@@ -1,4 +1,4 @@
-# Someday We'll Become a People: Pronoun Use in Ukrainian War Poetry (2014–2025)
+# The Poetic Plural in Wartime Ukraine: “Someday we’ll become a people” 
 
 Data and code for a within-author study of how first- and second-person pronoun use shifts in contemporary Ukrainian poetry across the 2022 full-scale invasion. This repository accompanies the article by Junyu Jiang and Amelia Glaser (U. C. San Diego) and reproduces every figure, table, and statistic reported in the paper.
 
